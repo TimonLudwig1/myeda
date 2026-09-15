@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def auto_plot(df: pd.DataFrame, x_col: str, y_col: str, other_cols: str | list, **kwargs):
+def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols: str | list | None = None, **kwargs):
     """
     Automatically generates a plot based on the provided DataFrame and specified columns.
 
@@ -16,17 +16,14 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str, other_cols: str | list, 
     - A matplotlib Axes object containing the generated plot.
     """
 
-    if x_col:
-        if x_col not in df.columns:
-            raise ValueError(f"Column '{x_col}' not found in DataFrame.")
-        d_type_x = df[x_col].dtype
+    if x_col not in df.columns:
+        raise ValueError(f"Column '{x_col}' not found in DataFrame.")
+    d_type_x = df[x_col].dtype
 
-        if d_type_x != 'object' and not pd.api.types.is_numeric_dtype(d_type_x) and not  pd.api.types.is_datetime64_any_dtype(d_type_x):
-            raise ValueError(f"Column '{x_col}' must be either numeric categorical (object), or datetime.")
-    else:
-        raise ValueError("x_col must be provided.")
+    if d_type_x != 'object' and not pd.api.types.is_numeric_dtype(d_type_x) and not  pd.api.types.is_datetime64_any_dtype(d_type_x):
+        raise ValueError(f"Column '{x_col}' must be either numeric categorical (object), or datetime.")
     
-    if y_col:
+    if y_col is not None:
         if y_col not in df.columns:
             raise ValueError(f"Column '{y_col}' not found in DataFrame.")
         d_type_y = df[y_col].dtype
@@ -52,7 +49,10 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str, other_cols: str | list, 
                 raise ValueError("Currently, only up to 2 additional columns can be considered for plotting. Please provide 2 or fewer additional columns.")
 
             # now check data types for plot decision logic:
-            pass 
+            # first: 3 variables total: x, y, and one other variable.
+            if type(d_type_other_cols) != list:
+                # d_type_other_cols is not a list, so a single column
+                pass
 
         # here: x and y but no other cols - so plots for 2 variables.
         else:
@@ -100,22 +100,34 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str, other_cols: str | list, 
     # 3+ variables / dimensions
     # │
     # ├── Two numerical + category
-    # │   └── Scatter plot with color/shape
+    # │   └── Scatter plot with color/shape - 3 total - y has to be numerical, the remaining have to be cat + num, I'll make sure it doesn't matter if x or other_col is either. 
     # │
     # ├── Two categorical + numerical value
-    # │   └── Heatmap / Grouped or stacked bar
-    # │
-    # ├── Ordered/time + multiple numerical series
+    # │   └── Heatmap / Grouped or stacked bar - 3 total - the numerical value is the intersect of the two categorical cols
+    # IF (Category_2 > 6 items) 
+    #     THEN Use Heat Map (Stacked bar will have too many colors)
+    # ELSE IF (Category_1 > 15 items) 
+    #     THEN Use Heat Map (Stacked bar will be too crowded)
+    # ELSE IF (The sum of Category_2 has no mathematical meaning) 
+    #     THEN Use Heat Map (e.g., Stacking "Temperature" and "Humidity" makes no sense)
+
+    # ELSE 
+#     Use Stacked Bar Chart (Best for showing absolute totals)
+    # │     
+    # ├── Ordered/time + multiple numerical series - 3+ total
     # │   └── Multi-line plot
     # │
-    # ├── Hierarchical categories + numerical size
+    # ├── Hierarchical categories + numerical size - 3+ total
     # │   └── Treemap
     # │
-    # ├── Flow between categories
+    # ├── Flow between categories - 3+ total
     # │   └── Sankey diagram
     # │
-    # └── Set membership / overlap
+    # └── Set membership / overlap - 3+ total
     #     └── Venn diagram
+
+
+
 
     # more than one variable as x against one variable as y: 
         # no: Is it ordered?:   
@@ -143,9 +155,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str, other_cols: str | list, 
 
     # code chekc structure: first: if d_type_x and d_type_y are even there: no? then only a singel variable!
 
-    if d_type_x and d_type_y:
-        # both columns are present, determine the plot type based on their data types
-        if pd.api.types.is_numeric_dtype(d_type_x) and pd.api.types.is_numeric_dtype
+
 
         
     
