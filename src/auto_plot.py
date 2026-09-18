@@ -1,6 +1,13 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
+def is_valid_dtype(dtype) -> bool:
+    return (
+        pd.api.types.is_numeric_dtype(dtype)
+        or pd.api.types.is_object_dtype(dtype)
+        or pd.api.types.is_datetime64_any_dtype(dtype)
+    )
+
 def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols: str | list | None = None, **kwargs):
     """
     Automatically generates a plot based on the provided DataFrame and specified columns.
@@ -20,7 +27,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
         raise ValueError(f"Column '{x_col}' not found in DataFrame.")
     d_type_x = df[x_col].dtype
 
-    if d_type_x != 'object' and not pd.api.types.is_numeric_dtype(d_type_x) and not  pd.api.types.is_datetime64_any_dtype(d_type_x):
+    if not is_valid_dtype(d_type_x): 
         raise ValueError(f"Column '{x_col}' must be either numeric categorical (object), or datetime.")
     
     if y_col is not None:
@@ -28,8 +35,8 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
             raise ValueError(f"Column '{y_col}' not found in DataFrame.")
         d_type_y = df[y_col].dtype
 
-        if d_type_y != 'object' and not pd.api.types.is_numeric_dtype(d_type_y) and not  pd.api.types.is_datetime64_any_dtype(d_type_y):
-                    raise ValueError(f"Column '{y_col}' must be either numeric categorical (object), or datetime.")
+        if not is_valid_dtype(d_type_y):
+            raise ValueError(f"Column '{y_col}' must be either numeric categorical (object), or datetime.")
 
         if df[y_col].equals(df[x_col]):
             raise ValueError(f"Column '{y_col}' cannot be the same as column '{x_col}'.")
@@ -39,20 +46,40 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
                 d_type_other_cols = df[other_cols].dtype
             elif isinstance(other_cols, list):
                 d_type_other_cols = [df[col].dtype for col in other_cols]
-                # insert check to make sure all columns are either numeric, categorical, or datetime - some other time
+                # check: length of list: I can't be bothered rn to do more than 2 additional variables (so 4 total) - so for now if len(other_cols) > 2 error:
+                if len(d_type_other_cols) > 2:
+                    raise ValueError("Currently, only up to 2 additional columns can be considered for plotting. Please provide 2 or fewer additional columns.")
+                # check to make sure all columns are either numeric, categorical, or datetime
+                for dtype_other in d_type_other_cols:
+                    if not is_valid_dtype(dtype_other):
+                        raise ValueError(f"Column '{dtype_other}' must be either numeric categorical (object), or datetime.")
             else:
                 raise ValueError("other_cols must be a string or a list of strings.")
 
             #here: x and y and other cols - so plots for 3 or more variables.
-            # check: length of list: I can't be bothered rn to do more than 2 additional variables (so 4 total) - so for now if len(other_cols) > 2 error:
-            if len(other_cols) > 2:
-                raise ValueError("Currently, only up to 2 additional columns can be considered for plotting. Please provide 2 or fewer additional columns.")
-
+            
             # now check data types for plot decision logic:
             # first: 3 variables total: x, y, and one other variable.
             if type(d_type_other_cols) != list:
-                # d_type_other_cols is not a list, so a single column
-                pass
+                # d_type_other_cols is not a list, so a single column - 3 variables
+                # two numeric, one cat first - num for x, y, cat for color
+                if pd.api.types.is_numeric_dtype(d_type_x) and pd.api.types.is_numeric_dtype(d_type_y) and pd.api.types.is_object_dtype(d_type_other_cols):
+                    fig = plt.figure
+                    fig, ax = plt.subplots()
+                    ax.scatter(df[x_col], df[y_col])
+
+                    ax.set_title(f"{x_col} against {y_col}")
+                    ax.set_xlabel(f"{x_col}")
+                    ax.set_ylabel(f"{y_col}")
+                    ax.legend()
+                    plt.show()
+                    return plt
+
+                # one numeric two cat (rn, I'm checking inly y as numeric, but x and y as categories and other as numeric for scatter with different size + opacity is also possible)
+                elif pd.api.types.is_object_dtype(d_type_y) and pd.api.types.is_numeric_dtype(y_col) and pd.api.types.is_object_dtype(d_type_other_cols):
+                    pass
+
+
 
         # here: x and y but no other cols - so plots for 2 variables.
         else:
@@ -61,7 +88,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
     # here: x but no y - so plots for 1 variable.
     else:
         pass 
-    if other_cols:
+    if other_cols is not None:
          raise ValueError("To plot more than one variable, fill y_col first. other_cols is for additional variables to consider for plotting, not for plotting more than one variable.")
     
     
