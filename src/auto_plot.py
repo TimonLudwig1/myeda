@@ -169,7 +169,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
                 # d_type_other_cols is not a list, so a single column - 3 variables
                 # two numeric, one cat
                 if pd.api.types.is_numeric_dtype(d_type_x) and pd.api.types.is_numeric_dtype(d_type_y) and pd.api.types.is_object_dtype(d_type_other_cols):
-                    plot_scatter(df, x_col, y_col, other_cols)
+                    return plot_scatter(df, x_col, y_col, other_cols)
 
                 # one numeric two cat
                 elif (pd.api.types.is_object_dtype(d_type_x) or pd.api.types.is_datetime64_any_dtype(d_type_x)) and pd.api.types.is_numeric_dtype(d_type_y) and pd.api.types.is_object_dtype(d_type_other_cols):
@@ -183,6 +183,9 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
                     else:                
                         # if too many cols - heatmap
                         return plot_heatmap(df, x_col, y_col, other_cols, agg)
+            else:
+                # list of other_cols
+                pass
                     
         # here: x and y but no other cols - so plots for 2 variables.
         else:
@@ -223,3 +226,8 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
 
     if other_cols is not None:
          raise ValueError("To plot more than one variable, fill y_col first. other_cols is for additional variables to consider for plotting, not for plotting more than one variable.")
+
+# things to fix:
+# The [heatmap groups by `y_col` and also aggregates `y_col` (line 72), so its values are unlikely to represent the intended comparison.
+# The [ordinary bar plot uses raw rows (line 86)] Repeated categories can therefore produce overlapping bars rather than a meaningful category summary.
+# The [histogram creates a new pair of subplots after creating `ax` (line 103), so the returned axes is not the plot you see. The documented return value also says one Axes, while the helpers return (fig, ax).
