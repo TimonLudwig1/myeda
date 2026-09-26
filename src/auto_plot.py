@@ -231,4 +231,22 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
 
 # things to fix:
 # plots for when we pass a list of other_cols 
-# The [histogram creates a new pair of subplots after creating `ax` (line 103), so the returned axes is not the plot you see. The documented return value also says one Axes, while the helpers return (fig, ax).
+
+    # more than 3 variables 
+    # │     
+    # ├── time + multiple numerical series - 3+ total (time series)
+    # │   └── Multi-line plot
+    # │
+    # ├── Hierarchical categories + numerical size - 3+ total ?? 
+    # │   └── Treemap
+    # │
+    # ├── Flow between categories - 3+ total
+    # │   └── Sankey diagram
+    # │
+    # └── Set membership / overlap - 3+ total
+    #     └── Venn diagram
+
+# examples for 4 or more variables:
+# Scatter plot: x = income, y = spending, color = customer segment, point size = account value.
+# Grouped bar chart split into panels: x = product, bar height = revenue, color = sales channel, one panel per region. 
+# Heatmaps split into panels: rows = city, columns = product, color = revenue, one panel per year.
