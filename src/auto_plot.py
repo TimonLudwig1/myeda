@@ -69,7 +69,7 @@ def plot_grouped_bar(df: pd.DataFrame, x_col: str, y_col: str, other_col: str, a
 def plot_heatmap(df: pd.DataFrame, x_col: str, y_col: str, other_col: str, agg: str):
     fig, ax = plt.subplots()
     pivot = (
-        df.groupby([x_col, y_col, other_col])[y_col]
+        df.groupby([x_col, other_col])[y_col]
         .agg(agg)
         .unstack()
         .fillna(0)
@@ -101,7 +101,7 @@ def plot_boxplot(df:pd.DataFrame, x_col: str, y_col:str):
     return fig, ax
 
 def plot_histogram(df:pd.DataFrame, x_col:str):
-    fig, ax = plt.subplots()
+    fig = plt.figure()
     plt.subplot(1, 2, 1)
     plt.hist(df[x_col])
     plt.title(f"distribution of {x_col}")
@@ -110,7 +110,7 @@ def plot_histogram(df:pd.DataFrame, x_col:str):
     df[x_col].plot.density(bw_method='scott', color='blue', linestyle='-', linewidth=2)
     plt.tight_layout()
     plt.show()
-    return fig, ax
+    return fig 
 
 def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols: str | list | None = None, agg: str = "sum", additive: bool=False, distribution: bool = False, **kwargs):
     """
@@ -205,7 +205,9 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
                 if distribution:
                     return plot_boxplot(df, x_col, y_col)
                 else:
-                    return plot_bar(df, x_col, y_col)
+                    groups = df.groupby(x_col)
+                    plot_df = groups[y_col].agg(agg).reset_index()
+                    return plot_bar(plot_df, x_col, y_col)
             else:
                 # fix this when writing the function. Do some kind of frequency count and plot heatmap/bars or smth
                 raise ValueError("If you want to plot two variables against each other, use a frequency method first and pass 3 arguments to plot")
@@ -228,6 +230,5 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
          raise ValueError("To plot more than one variable, fill y_col first. other_cols is for additional variables to consider for plotting, not for plotting more than one variable.")
 
 # things to fix:
-# The [heatmap groups by `y_col` and also aggregates `y_col` (line 72), so its values are unlikely to represent the intended comparison.
-# The [ordinary bar plot uses raw rows (line 86)] Repeated categories can therefore produce overlapping bars rather than a meaningful category summary.
+# plots for when we pass a list of other_cols 
 # The [histogram creates a new pair of subplots after creating `ax` (line 103), so the returned axes is not the plot you see. The documented return value also says one Axes, while the helpers return (fig, ax).
