@@ -1,5 +1,3 @@
-from lets_plot import ylab, xlab
-from matplotlib.pylab import xlabel, ylabel
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -13,21 +11,25 @@ def is_valid_dtype(dtype) -> bool:
 
 # plotting functions 
 
-def plot_scatter(df: pd.DataFrame, x_col: str, y_col: str, other_col: str | None = None):
+def plot_scatter(df: pd.DataFrame, x_col: str, y_col: str, other_col: str | list[str] | None = None):
     fig, ax = plt.subplots()
 
     if other_col: 
-        #draw one scatter per category 
-        for category, group in df.groupby(other_col):
-            ax.scatter(
-                group[x_col],
-                group[y_col],
-                label=category
-            )
-        ax.set(title=f"{x_col} against {y_col}", xlabel=x_col, ylabel=y_col)
-        ax.legend()
-        plt.show()
-        return fig, ax
+        if type(other_col) is list:
+            # treat the entries of the other_cols list as unordered and check the df cols for each entry
+            pass
+        else: 
+            #draw one scatter per category 
+            for category, group in df.groupby(other_col):
+                ax.scatter(
+                    group[x_col],
+                    group[y_col],
+                    label=category
+                )
+            ax.set(title=f"{x_col} against {y_col}", xlabel=x_col, ylabel=y_col)
+            ax.legend()
+            plt.show()
+            return fig, ax
     else:
         ax.scatter(df[x_col], df[y_col])
 
@@ -112,7 +114,7 @@ def plot_histogram(df:pd.DataFrame, x_col:str):
     plt.show()
     return fig 
 
-def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols: str | list | None = None, agg: str = "sum", additive: bool=False, distribution: bool = False, **kwargs):
+def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols: str | list[str] | None = None, agg: str = "sum", additive: bool=False, distribution: bool = False, **kwargs):
     """
     Automatically generates a plot based on the provided DataFrame and specified columns.
 
@@ -149,23 +151,6 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
         if other_cols is not None:
             if isinstance(other_cols, str):
                 d_type_other_cols = df[other_cols].dtype
-            elif isinstance(other_cols, list):
-                d_type_other_cols = [df[col].dtype for col in other_cols]
-                # check: length of list: I can't be bothered rn to do more than 2 additional variables (so 4 total) - so for now if len(other_cols) > 2 error:
-                if len(d_type_other_cols) > 2:
-                    raise ValueError("Currently, only up to 2 additional columns can be considered for plotting. Please provide 2 or fewer additional columns.")
-                # check to make sure all columns are either numeric, categorical, or datetime
-                for dtype_other in d_type_other_cols:
-                    if not is_valid_dtype(dtype_other):
-                        raise ValueError(f"Column '{dtype_other}' must be either numeric categorical (object), or datetime.")
-            else:
-                raise ValueError("other_cols must be a string or a list of strings.")
-
-            #here: x and y and other cols - so plots for 3 or more variables.
-            
-            # now check data types for plot decision logic:
-            # first: 3 variables total: x, y, and one other variable.
-            if type(d_type_other_cols) != list:
                 # d_type_other_cols is not a list, so a single column - 3 variables
                 # two numeric, one cat
                 if pd.api.types.is_numeric_dtype(d_type_x) and pd.api.types.is_numeric_dtype(d_type_y) and pd.api.types.is_object_dtype(d_type_other_cols):
@@ -183,10 +168,22 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
                     else:                
                         # if too many cols - heatmap
                         return plot_heatmap(df, x_col, y_col, other_cols, agg)
-            else:
-                # list of other_cols
-                pass
                     
+            elif isinstance(other_cols, list):
+                d_types_other_cols = [df[col].dtype for col in other_cols]
+                # check: length of list: I can't be bothered rn to do more than 2 additional variables (so 4 total) - so for now if len(other_cols) > 2 error:
+                if len(d_types_other_cols) > 2:
+                    raise ValueError("Currently, only up to 2 additional columns can be considered for plotting. Please provide 2 or fewer additional columns.")
+                # check to make sure all columns are either numeric, categorical, or datetime
+                for dtype_other in d_types_other_cols:
+                    if not is_valid_dtype(dtype_other):
+                        raise ValueError(f"Column '{dtype_other}' must be either numeric categorical (object), or datetime.")         
+                return plot_scatter(df, x_col, y_col, other_cols)
+            else:
+                raise ValueError("other_cols must be a string or a list of strings.")
+            
+            # now check data types for plot decision logic:
+            # first: 3 variables total: x, y, and one other variable.      
         # here: x and y but no other cols - so plots for 2 variables.
         else:
             #num + num (or date)
@@ -223,7 +220,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
                 x_col_count=(x_col, 'count')
             ).reset_index()
 
-            return plot_bar(count_df, x_col, "x_col_count")
+            return plot_bar(count_df, x_col, f"{x_col}_count")
            
 
     if other_cols is not None:
@@ -234,7 +231,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
 
     # more than 3 variables 
     # │     
-    # ├── time + multiple numerical series - 3+ total (time series)
+    # ├── time + multiple numerical series - 3+ total (time series or x and y num with different lines)
     # │   └── Multi-line plot
     # │
     # ├── Hierarchical categories + numerical size - 3+ total ?? 
