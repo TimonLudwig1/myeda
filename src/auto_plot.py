@@ -1,3 +1,4 @@
+from matplotlib.pylab import plot
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -8,6 +9,66 @@ def is_valid_dtype(dtype) -> bool:
         or pd.api.types.is_object_dtype(dtype)
         or pd.api.types.is_datetime64_any_dtype(dtype)
     )
+
+def get_dtype(dtype):
+    if pd.api.types.is_numeric_dtype(dtype):
+        return "numeric"
+    elif pd.api.types.is_object_dtype(dtype):
+        return "categorical"
+    elif pd.api.types.is_datetime64_any_dtype(dtype):
+        return "datetime"
+    elif pd.api.types.is_bool_dtype(dtype):
+        return "boolean"
+    else: 
+        raise ValueError(f"Column contains datatype not suitable for plotting. Datatype: {dtype}")
+
+# handler functions - handlers that just call the plot functions are setup, in case the plotting logic gets more complicated 
+
+def handle_single_num(df: pd.DataFrame, col: str):
+    return plot_histogram(df, col)
+
+def handle_single_cat_or_bool(df: pd.DataFrame, col: str):
+    groups = df.groupby(col)
+    plot_df= groups.agg(
+        count={col, "count"}
+    ).reset_index()
+
+    return plot_bar(plot_df, col, "count")
+
+def handle_num_num(df: pd.DataFrame, x_col: str, y_col: str):
+    return plot_scatter(df, x_col, y_col)
+
+def handle_num_cat(df: pd.DataFrame, x_col: str, y_col: str, distribution: bool, agg: str):
+    if distribution:
+        return plot_boxplot(df, x_col, y_col)
+    else:
+        groups = df.groupby(x_col)
+        plot_df = groups[y_col].agg(agg).reset_index()
+
+        return plot_bar(plot_df, x_col, y_col)
+
+def handle_num_datetime(df: pd.DataFrame, x_col: str, y_col: str, agg: str):
+    groups = df.groupby(pd.Grouper(key=x_col, freq="D"))
+    plot_df = groups[y_col].agg(agg).reset_index()
+
+    return plot_scatter(plot_df, x_col, y_col)
+
+def handle_cat_cat(df: pd.DataFrame, x_col: str, y_col: str, agg: str = "count"):
+    return plot_grouped_bar(df, x_col, y_col, agg)
+
+def handle_num_num_cat(df: pd.DataFrame, x_col: str, y_col: str, other_col: str):
+    return plot_scatter(df, x_col, y_col, other_col)
+
+def handle_num_cat_cat(df: pd.DataFrame, x_col: str, y_col: str, other_col: str, agg: str, additive: bool):
+    if len(df[x_col].unique()) <= 6 and len(df[other_col].unique()) <= 5:
+        if additive:
+            return plot_stacked_bar(df, x_col, y_col, other_col, agg)
+        else: 
+            return plot_grouped_bar(df, x_col, y_col, agg, other_col)
+    else:
+        return plot_heatmap(df, x_col, y_col, other_col, agg)
+
+
 
 # plotting functions 
 
@@ -58,15 +119,28 @@ def plot_stacked_bar(df: pd.DataFrame, x_col: str, y_col: str, other_col: str, a
     plt.show()
     return fig, ax 
 
-def plot_grouped_bar(df: pd.DataFrame, x_col: str, y_col: str, other_col: str, agg: str):
-    fig, ax = plt.subplots()
-    df.groupby([x_col, other_col])[y_col].agg(agg).unstack().plot(kind='bar', ax=ax)
-    ax.set_title(f"{x_col} against {y_col} and {other_col}")
-    ax.set_xlabel(f"{x_col}")
-    ax.set_ylabel(f"{y_col}")
-    ax.legend(title=other_col)
-    plt.show()
-    return fig, ax
+def plot_grouped_bar(df: pd.DataFrame, x_col: str, y_col: str, agg: str, other_col: str | None = None):
+    if other_col:
+        fig, ax = plt.subplots()
+        df.groupby([x_col, other_col])[y_col].agg(agg).unstack().plot(kind='bar', ax=ax)
+        ax.set_title(f"{x_col} against {y_col} and {other_col}")
+        ax.set_xlabel(f"{x_col}")
+        ax.set_ylabel(f"{y_col}")
+        ax.legend(title=other_col)
+        plt.tight_layout()
+        plt.show()
+        return fig, ax
+    else:
+        fig, ax = plt.subplots()
+        counts = (df[x_col, y_col]).value_counts().reset_index(name="combination_count")
+        counts.plot(kind="bar", ax=ax)
+        ax.set_title(f"count of each unique combination of {x_col} and {y_col}")
+        ax.set_xlabel("combinations")
+        ax.set_ylabel("count")
+        ax.tick_params(axis="x", rotation=45)
+        plt.tight_layout()
+        plt.show()
+        return fig, ax
 
 def plot_heatmap(df: pd.DataFrame, x_col: str, y_col: str, other_col: str, agg: str):
     fig, ax = plt.subplots()
@@ -114,6 +188,17 @@ def plot_histogram(df:pd.DataFrame, x_col:str):
     plt.show()
     return fig 
 
+PLOT_MAP = {
+    ("numeric"): handle_single_num,
+    ("categorical"): handle_single_cat_or_bool, 
+    ("numeric", "numeric"): handle_num_num, 
+    ("numeric", "categorical"): handle_num_cat,
+    ("numeric", "datetime"): handle_num_datetime,
+    ("categorical", "categorical"): handle_cat_cat,
+    ("numerical", "numerical", "categorical"): handle_num_num_cat,
+    ("numerical", "categorical", "categorical"): handle_num_cat_cat
+}
+
 def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols: str | list[str] | None = None, agg: str = "sum", additive: bool=False, distribution: bool = False, **kwargs):
     """
     Automatically generates a plot based on the provided DataFrame and specified columns.
@@ -126,7 +211,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
     - **kwargs: Additional keyword arguments to pass to the plotting function.
 
     Returns:
-    - A matplotlib Axes object containing the generated plot.
+    - matplotlib fig, ax containing the generated plot.
     """
     # everything that is just plain messy code will eventually be rewritten in functions. This rn is just to test stuff
 
@@ -164,7 +249,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
                         if additive:
                             return plot_stacked_bar(df, x_col, y_col, other_cols, agg)
                         else: 
-                            return plot_grouped_bar(df, x_col, y_col, other_cols, agg)   
+                            return plot_grouped_bar(df, x_col, y_col, other_col=other_cols, agg=agg)   
                     else:                
                         # if too many cols - heatmap
                         return plot_heatmap(df, x_col, y_col, other_cols, agg)
@@ -214,7 +299,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
         if pd.api.types.is_numeric_dtype(d_type_x):
             return plot_histogram(df, x_col)
         else:
-        # cat col
+        # cat col or bool
             groups = df.groupby(x_col)
             count_df = groups.agg(
                 x_col_count=(x_col, 'count')
