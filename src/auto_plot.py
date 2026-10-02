@@ -1,3 +1,5 @@
+from esda.lee import y
+from fugue.column.expressions import function
 from matplotlib.pylab import plot
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -12,7 +14,7 @@ def is_valid_dtype(dtype) -> bool:
         or pd.api.types.is_datetime64_any_dtype(dtype)
     )
 
-def get_dtype(dtype):
+def get_dtype(dtype) -> str:
     if pd.api.types.is_numeric_dtype(dtype):
         return "numeric"
     elif pd.api.types.is_object_dtype(dtype):
@@ -190,22 +192,20 @@ def handle_num_cat_cat(df: pd.DataFrame, x_col: str, y_col: str, other_col: str,
     else:
         return plot_heatmap(df, x_col, y_col, other_col, agg)
 
-
+TYPE_ORDER = {
+    "numeric": 0,
+    "categorical": 1,
+    "datetime": 2
+}
 PLOT_MAP: dict[tuple, Callable[..., Any]] = {
     ("numeric",): handle_single_num,
     ("categorical",): handle_single_cat_or_bool, 
     ("numeric", "numeric"): handle_num_num, 
     ("numeric", "categorical"): handle_num_cat, 
-    ("categorical", "numeric"): handle_num_cat,
     ("numeric", "datetime"): handle_num_datetime,
-    ("datetime", "numeric"): handle_num_datetime,
     ("categorical", "categorical"): handle_cat_cat,
     ("numeric", "numeric", "categorical"): handle_num_num_cat,
-    ("numeric", "categorical", "numeric"): handle_num_num_cat,
-    ("categorical", "numeric", "numeric"): handle_num_num_cat,
     ("numeric", "categorical", "categorical"): handle_num_cat_cat,
-    ("categorical", "numeric", "categorical"): handle_num_cat_cat,
-    ("categorical", "categorical", "numeric"): handle_num_cat_cat
 }
 
 def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols: str | list[str] | None = None, agg: str = "sum", additive: bool=False, distribution: bool = False, **kwargs):
@@ -222,7 +222,6 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
     Returns:
     - matplotlib fig, ax containing the generated plot.
     """
-    # everything that is just plain messy code will eventually be rewritten in functions. This rn is just to test stuff
 
     if x_col not in df.columns:
         raise ValueError(f"Column '{x_col}' not found in DataFrame.")
@@ -242,12 +241,11 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
 
         if other_cols is not None:
             if isinstance(other_cols, str):
-
-                key = (
-                    get_dtype(df[x_col]),
-                    get_dtype(df[y_col]),
-                    get_dtype(df[other_cols])
-                )
+                types = [get_dtype(df[other_cols]), get_dtype(df[y_col]), get_dtype(df[x_col])]               
+                key = tuple(sorted( # sorted method loops through types
+                    types,
+                    key=lambda dtype: TYPE_ORDER[dtype] #lambda  <parameter> : <expression> (return)
+                ))
                 handler = PLOT_MAP[key]
                 handler(
                     df = df,
@@ -274,10 +272,11 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
      
         # here: x and y but no other cols - so plots for 2 variables.
         else:
-            key = (
-                get_dtype(df[x_col].dtype),
-                get_dtype(df[y_col])
-            )
+            types = [get_dtype(x_col), get_dtype(y_col)]
+            key = tuple(sorted(
+                types,
+                key=lambda dtype: TYPE_ORDER[dtype]
+            ))
             handler = PLOT_MAP[key]
             handler(
                 df = df,
