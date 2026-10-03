@@ -3,27 +3,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from collections.abc import Callable
 from typing import Any
+from column_utils import is_valid_dtype, get_dtype, check_if_string
 
-def is_valid_dtype(dtype) -> bool:
-    return (
-        pd.api.types.is_numeric_dtype(dtype)
-        or pd.api.types.is_object_dtype(dtype)
-        or pd.api.types.is_datetime64_any_dtype(dtype)
-    )
-
-def get_dtype(dtype) -> str:
-    if pd.api.types.is_numeric_dtype(dtype):
-        return "numeric"
-    elif pd.api.types.is_object_dtype(dtype):
-        return "categorical"
-    elif pd.api.types.is_datetime64_any_dtype(dtype):
-        return "datetime"
-    elif pd.api.types.is_bool_dtype(dtype):
-        return "boolean"
-    else: 
-        raise ValueError(f"Column contains datatype not suitable for plotting. Datatype: {dtype}")
-
-  
+    
 # plotting functions 
 
 def plot_scatter(df: pd.DataFrame, x_col: str, y_col: str, other_col: str | list[str] | None = None):
@@ -32,7 +14,7 @@ def plot_scatter(df: pd.DataFrame, x_col: str, y_col: str, other_col: str | list
     if other_col: 
         if type(other_col) is list:
             # treat the entries of the other_cols list as unordered and check the df cols for each entry
-            pass
+            raise NotImplementedError("List values for other_col are not supported yet.")
         else: 
             #draw one scatter per category 
             for category, group in df.groupby(other_col):
@@ -220,6 +202,8 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
     - matplotlib fig, ax containing the generated plot.
     """
 
+    check_if_string(x_col)
+
     if x_col not in df.columns:
         raise ValueError(f"Column '{x_col}' not found in DataFrame.")
 
@@ -227,6 +211,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
         raise ValueError(f"Column '{x_col}' must be either numeric, categorical (object), or datetime.")
     
     if y_col is not None:
+        check_if_string(y_col)
         if y_col not in df.columns:
             raise ValueError(f"Column '{y_col}' not found in DataFrame.")
         
@@ -254,16 +239,19 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
                 )
 
             elif isinstance(other_cols, list):
-                d_types_other_cols = [df[col].dtype for col in other_cols]
+                d_types_other_cols = []
+                for col in other_cols:
+                    check_if_string(col)
+                    d_types_other_cols.append(df[col].dtype)
                 # check: length of list: I can't be bothered rn to do more than 2 additional variables (so 4 total) - so for now if len(other_cols) > 2 error:
                 if len(d_types_other_cols) > 2:
-                    raise ValueError("Currently, only up to 2 additional columns can be considered for plotting. Please provide 2 or fewer additional columns.")
+                    raise NotImplementedError("Currently, only up to 2 additional columns can be considered for plotting. Please provide 2 or fewer additional columns.")
                 # check to make sure all columns are either numeric, categorical, or datetime
                 for dtype_other in d_types_other_cols:
                     if not is_valid_dtype(dtype_other):
                         raise ValueError(f"Column '{dtype_other}' must be either numeric categorical (object), or datetime.")      
                 # need to build handlers for this case    
-                pass
+                raise NotImplementedError("Passing a list of column names is not implemented yet")
             else:
                 raise ValueError("other_cols must be a string or a list of strings.")
      
