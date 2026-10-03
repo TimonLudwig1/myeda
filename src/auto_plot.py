@@ -1,6 +1,3 @@
-from esda.lee import y
-from fugue.column.expressions import function
-from matplotlib.pylab import plot
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -297,25 +294,5 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
     if other_cols is not None:
          raise ValueError("To plot more than one variable, fill y_col first. other_cols is for additional variables to consider for plotting, not for plotting more than one variable.")
 
-# things to fix:
-# plots for when we pass a list of other_cols 
 
-    # more than 3 variables 
-    # │     
-    # ├── time + multiple numerical series - 3+ total (time series or x and y num with different lines)
-    # │   └── Multi-line plot
-    # │
-    # ├── Hierarchical categories + numerical size - 3+ total ?? 
-    # │   └── Treemap
-    # │
-    # ├── Flow between categories - 3+ total
-    # │   └── Sankey diagram
-    # │
-    # └── Set membership / overlap - 3+ total
-    #     └── Venn diagram
-
-# examples for 4 or more variables:
-# Scatter plot: x = income, y = spending, color = customer segment, point size = account value.
-# Grouped bar chart split into panels: x = product, bar height = revenue, color = sales channel, one panel per region. 
-# Heatmaps split into panels: rows = city, columns = product, color = revenue, one panel per year.
 
