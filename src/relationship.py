@@ -7,6 +7,11 @@ from scipy import stats
 
 # helpers
 
+def check_if_valid_for_t_test(items: list[Any]) -> None:
+    for item in items:
+        if not isinstance(item, (float, list)):
+            raise ValueError(f"Invalid data type {type(item)} for {item}. Argument has to either be a number or a list")
+
 def calculate_mean(df: pd.DataFrame, cols: str | list) -> float | dict:
     if isinstance(cols, str):
         if get_dtype(df[cols].dtype) != "numeric": 
@@ -39,21 +44,28 @@ def students_t_test(
     
     # t-test of diff of two means with similar variances - two sample
     # t = (mean1 - mean2) / sqr(std1^2/N1 + std2^2/N2)
+    # use helper function 
     if mean2:
+        if std2 is None or N2 is None:
+            raise ValueError(f"{std2} and {N2} are missing")
         if not isinstance(mean1, float):
             raise ValueError(f"Invalid data type: {type(mean1)}. {mean1} has to either be an int or float")
         if not isinstance(std1, float):
             raise ValueError(f"Invalid data type: {type(std1)}. {std1} has to either be an int or float")
         if not isinstance(N1, float):
             raise ValueError(f"Invalid data type: {type(N1)}. {N1} has to either be an int or float")
-        if std2 is None or N2 is None:
-            raise ValueError(f"{std2} and {N2} are missing")
         # maybe check if mean2 and std2 are only int or float as well 
         t_statistic = (mean1 - mean2) / (sqrt((std1**2 / N1) + (std2**2 / N2)))
         return t_statistic
     else:
-        if isinstance(mean1, float):
-            raise ValueError("When passing a number as the first sample mean, provide the second sample mean as well")
+        if not isinstance(mean1, list):
+            raise ValueError(f"Invalid data type {type(mean1)}. When passing just a number as the first sample mean, provide the second sample mean as well. Or pass a list of the two sample means. Other data types are not supported")
+        if isinstance(std1, float): 
+            # std2 has to be float - otherwise pass std as a list 
+            if not isinstance(std2, float):
+                raise ValueError("When passing standard deviation 1 as a number, pass standard deviation as a number as well. Or pass a list of both standard deviations for std1")
+        if isinstance(N1, float):
+            raise ValueError("When passing a list of sample means and standard deviations, provide the sample sizes as a list as well. Or pass each argument as single values")
 
 def welch_t_test():
     #t-test from difference of two means with different variances
