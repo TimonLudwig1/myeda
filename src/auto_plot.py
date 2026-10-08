@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from collections.abc import Callable
 from typing import Any
-from column_utils import is_valid_dtype, get_dtype, check_if_string
+from column_utils import _is_valid_dtype, _get_dtype, _check_if_string
 
     
 # plotting functions 
@@ -126,19 +126,19 @@ def plot_histogram(df:pd.DataFrame, x_col:str):
 
 # handler functions - handlers that just call the plot functions are setup, in case the plotting logic gets more complicated 
 
-def handle_single_num(df: pd.DataFrame, col: str, **_):
+def _handle_single_num(df: pd.DataFrame, col: str, **_):
     return plot_histogram(df, col)
 
-def handle_single_cat_or_bool(df: pd.DataFrame, col: str, **_):
+def _handle_single_cat_or_bool(df: pd.DataFrame, col: str, **_):
     counts = df.groupby(col).size()                 
     plot_df = counts.to_frame("count").reset_index()  
 
     return plot_bar(plot_df, col, "count")
 
-def handle_num_num(df: pd.DataFrame, x_col: str, y_col: str, **_):
+def _handle_num_num(df: pd.DataFrame, x_col: str, y_col: str, **_):
     return plot_scatter(df, x_col, y_col)
 
-def handle_num_cat(df: pd.DataFrame, x_col: str, y_col: str, distribution: bool, agg: str):
+def _handle_num_cat(df: pd.DataFrame, x_col: str, y_col: str, distribution: bool, agg: str):
     if distribution:
         return plot_boxplot(df, x_col, y_col)
     else:
@@ -147,19 +147,19 @@ def handle_num_cat(df: pd.DataFrame, x_col: str, y_col: str, distribution: bool,
 
         return plot_bar(plot_df, x_col, y_col)
 
-def handle_num_datetime(df: pd.DataFrame, x_col: str, y_col: str, agg: str, **_):
+def _handle_num_datetime(df: pd.DataFrame, x_col: str, y_col: str, agg: str, **_):
     groups = df.groupby(pd.Grouper(key=x_col, freq="D"))
     plot_df = groups[y_col].agg(agg).reset_index()
 
     return plot_scatter(plot_df, x_col, y_col)
 
-def handle_cat_cat(df: pd.DataFrame, x_col: str, y_col: str, agg: str = "count", **_):
+def _handle_cat_cat(df: pd.DataFrame, x_col: str, y_col: str, agg: str = "count", **_):
     return plot_grouped_bar(df, x_col, y_col, agg)
 
-def handle_num_num_cat(df: pd.DataFrame, x_col: str, y_col: str, other_col: str, **_):
+def _handle_num_num_cat(df: pd.DataFrame, x_col: str, y_col: str, other_col: str, **_):
     return plot_scatter(df, x_col, y_col, other_col)
 
-def handle_num_cat_cat(df: pd.DataFrame, x_col: str, y_col: str, other_col: str, agg: str, additive: bool, **_):
+def _handle_num_cat_cat(df: pd.DataFrame, x_col: str, y_col: str, other_col: str, agg: str, additive: bool, **_):
     if not pd.api.types.is_numeric_dtype(df[y_col].dtype):
         raise ValueError("please use a numeric column for the y_column")
     
@@ -177,14 +177,14 @@ TYPE_ORDER = {
     "datetime": 2
 }
 PLOT_MAP: dict[tuple, Callable[..., Any]] = {
-    ("numeric",): handle_single_num,
-    ("categorical",): handle_single_cat_or_bool, 
-    ("numeric", "numeric"): handle_num_num, 
-    ("numeric", "categorical"): handle_num_cat, 
-    ("numeric", "datetime"): handle_num_datetime,
-    ("categorical", "categorical"): handle_cat_cat,
-    ("numeric", "numeric", "categorical"): handle_num_num_cat,
-    ("numeric", "categorical", "categorical"): handle_num_cat_cat,
+    ("numeric",): _handle_single_num,
+    ("categorical",): _handle_single_cat_or_bool, 
+    ("numeric", "numeric"): _handle_num_num, 
+    ("numeric", "categorical"): _handle_num_cat, 
+    ("numeric", "datetime"): _handle_num_datetime,
+    ("categorical", "categorical"): _handle_cat_cat,
+    ("numeric", "numeric", "categorical"): _handle_num_num_cat,
+    ("numeric", "categorical", "categorical"): _handle_num_cat_cat,
 }
 
 def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols: str | list[str] | None = None, agg: str = "sum", additive: bool=False, distribution: bool = False, **kwargs):
@@ -202,20 +202,20 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
     - matplotlib fig, ax containing the generated plot.
     """
 
-    check_if_string(x_col)
+    _check_if_string(x_col)
 
     if x_col not in df.columns:
         raise ValueError(f"Column '{x_col}' not found in DataFrame.")
 
-    if not is_valid_dtype(df[x_col].dtype): 
+    if not _is_valid_dtype(df[x_col].dtype): 
         raise ValueError(f"Column '{x_col}' must be either numeric, categorical (object), or datetime.")
     
     if y_col is not None:
-        check_if_string(y_col)
+        _check_if_string(y_col)
         if y_col not in df.columns:
             raise ValueError(f"Column '{y_col}' not found in DataFrame.")
         
-        if not is_valid_dtype(df[y_col].dtype):
+        if not _is_valid_dtype(df[y_col].dtype):
             raise ValueError(f"Column '{y_col}' must be either numeric categorical (object), or datetime.")
 
         if df[y_col].equals(df[x_col]):
@@ -223,7 +223,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
 
         if other_cols is not None:
             if isinstance(other_cols, str):
-                types = [get_dtype(df[other_cols]), get_dtype(df[y_col]), get_dtype(df[x_col])]               
+                types = [_get_dtype(df[other_cols]), _get_dtype(df[y_col]), _get_dtype(df[x_col])]               
                 key = tuple(sorted( # sorted method loops through types
                     types,
                     key=lambda dtype: TYPE_ORDER[dtype] #lambda  <parameter> : <expression> (return)
@@ -241,14 +241,14 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
             elif isinstance(other_cols, list):
                 d_types_other_cols = []
                 for col in other_cols:
-                    check_if_string(col)
+                    _check_if_string(col)
                     d_types_other_cols.append(df[col].dtype)
                 # check: length of list: I can't be bothered rn to do more than 2 additional variables (so 4 total) - so for now if len(other_cols) > 2 error:
                 if len(d_types_other_cols) > 2:
                     raise NotImplementedError("Currently, only up to 2 additional columns can be considered for plotting. Please provide 2 or fewer additional columns.")
                 # check to make sure all columns are either numeric, categorical, or datetime
                 for dtype_other in d_types_other_cols:
-                    if not is_valid_dtype(dtype_other):
+                    if not _is_valid_dtype(dtype_other):
                         raise ValueError(f"Column '{dtype_other}' must be either numeric categorical (object), or datetime.")      
                 # need to build handlers for this case    
                 raise NotImplementedError("Passing a list of column names is not implemented yet")
@@ -257,7 +257,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
      
         # here: x and y but no other cols - so plots for 2 variables.
         else:
-            types = [get_dtype(x_col), get_dtype(y_col)]
+            types = [_get_dtype(x_col), _get_dtype(y_col)]
             key = tuple(sorted(
                 types,
                 key=lambda dtype: TYPE_ORDER[dtype]
@@ -272,7 +272,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
             )
     # plots for one variable
     else:
-        key = (get_dtype(df[x_col].dtype),)
+        key = (_get_dtype(df[x_col].dtype),)
         handler = PLOT_MAP[key]
         handler(
             df = df, 
