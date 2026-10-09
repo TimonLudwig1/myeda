@@ -11,14 +11,14 @@ def _is_valid_dtype(dtype) -> bool:
 def _get_dtype(dtype) -> str:
     if pd.api.types.is_numeric_dtype(dtype):
         return "numeric"
+    elif dtype is list: 
+            return "list"
     elif pd.api.types.is_object_dtype(dtype):
         return "categorical"
     elif pd.api.types.is_datetime64_any_dtype(dtype):
         return "datetime"
     elif pd.api.types.is_bool_dtype(dtype):
         return "boolean"
-    elif dtype is list: 
-        return "list"
     else: 
         raise ValueError(f"Column contains datatype not suitable for plotting or calculating. Datatype: {dtype}")
 
