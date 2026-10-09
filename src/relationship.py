@@ -1,7 +1,7 @@
 import numpy as np
 from math import sqrt
 import pandas as pd 
-from column_utils import _get_dtype, _check_if_string
+from src.column_utils import _get_dtype, _check_if_string
 from typing import Any
 import scipy.stats
 
@@ -29,6 +29,8 @@ def _check_if_valid_for_t_test(params: dict[Any, Any]) -> None:
     for name, value in params.items():
         if value is None:
             continue
+        elif isinstance(value, bool):
+            continue
         elif isinstance(value, list):
             for item in value:
                 if item <= 0:
@@ -40,7 +42,7 @@ def _check_if_valid_for_t_test(params: dict[Any, Any]) -> None:
             if value <= 0:
                 raise ValueError(f"Invalid value for: {value}. {value} is smaller than 0")
         else:
-            raise ValueError(f"Invalid data type {type(value)} for {name}. Argument has to either be a number or a list")
+            raise ValueError(f"Invalid data type {type(value)} for {name}. Argument has to either be a number, bool or a list, depending on the argument")
 
 def _calculate_mean(df: pd.DataFrame, cols: str | list) -> float | dict:
     if isinstance(cols, str):
@@ -70,7 +72,7 @@ def significance_check(t_statistic: float, t_crit: float, critical_level: float)
     return stat_significance, is_significant
 
 
-def welch_t_test(
+def _independant_t_test(
     mean1: float | dict | list, 
     std1: float | list = 0, 
     N1: float | list = 0,
@@ -78,13 +80,14 @@ def welch_t_test(
     two_tailed: bool = False,
     left_tailed: bool = False,
     right_tailed: bool = False,
+    equal_var: bool = False,
+    hypothetical_difference: float = 0,
     mean2: float | None = None, 
     std2: float | None = None,
     N2: float | None = None,
 ) -> dict:
 
-    # t-test for difference of two means with different variances
-    # add bool for left, right tailed or two tailed
+    # t-test helper 
 
     # if just a single dict is passed 
     if isinstance(mean1, dict):
@@ -135,6 +138,9 @@ def welch_t_test(
 
     _check_if_valid_for_t_test(params)
 
+    if sum([two_tailed, left_tailed, right_tailed]) != 1:
+        raise ValueError("Exactly one test type must be selected")
+
     if param_types in VALID_COMBINATIONS_T_TEST:
         # standardize input into a dict, then get values out of dict for calculation
         if param_types["mean1"] == "list":
@@ -154,35 +160,41 @@ def welch_t_test(
             "N1": N1,
             "N2": N2,
         })
+        if equal_var: 
+            pooled_variance = ((((N1 - 1)*(std1**2)) + ((N2 - 1)*std2**2)) / (N1 + N2 - 2)) # type: ignore
+            standard_error = sqrt(pooled_variance * ((1/N1) + (1/N2)))  # type: ignore
+            dof = (N1 + N2 - 2) # type: ignore
+        else:
+            standard_error = sqrt((std1**2 / N1) + (std2**2 / N2)) # type: ignore
+            dof = (((std1**2/N1) + (std2**2/N2))**2) / (((std1**2 / N1)**2 / (N1 - 1)) + ((std2**2 / N2)**2 / (N2 - 1)))  # type: ignore
 
-        t_statistic = (mean1 - mean2) / (sqrt((std1**2 / N1) + (std2**2 / N2))) # type: ignore
-
-        dof = (((std1**2/N1) + (std2**2/N2))**2) / (((std1**2 / N1)**2 / (N1 - 1)) + ((std2**2 / N2)**2 / (N2 - 1)))  # type: ignore
-
-        if sum([two_tailed, left_tailed, right_tailed]) != 1:
-            raise ValueError("Exactly one test type must be selected")
+        t_statistic = ((mean1 - mean2) - hypothetical_difference) / standard_error  # type: ignore
         
         if two_tailed: 
             t_crit = float(scipy.stats.t.ppf((1 - (critical_level/2)), dof))
             p_value = float(2 * scipy.stats.t.sf(abs(t_statistic), dof))
             stat_significance, is_significant =  significance_check(t_statistic, t_crit, critical_level)
+            test_type = "two_tailed"
 
 
         elif left_tailed: # mean1 significantly smaller than mean2 
             t_crit = float(scipy.stats.t.ppf((critical_level), dof))
             p_value = float(scipy.stats.t.cdf(t_statistic, dof))
             stat_significance, is_significant = significance_check(t_statistic, t_crit, critical_level)
+            test_type = "left_tailed"
 
         elif right_tailed: # mean1 significantly larger than mean2 
             t_crit = float(scipy.stats.t.ppf((1 - critical_level), dof))
             p_value = float(scipy.stats.t.sf(t_statistic, dof))
             stat_significance, is_significant = significance_check(t_statistic, t_crit, critical_level)
+            test_type = "right_tailed"
         
         else:
             raise ValueError("at least one test type has to be chosen")
 
         results = {
             "significance": stat_significance,
+            "test_type": test_type,
             "dof": dof,
             "p_value": p_value,
             "is_significant": is_significant,
@@ -196,17 +208,74 @@ def welch_t_test(
 
 def one_sample_t_test():
     # mean of column against given value - you can pass either just the column and it calculates the mean itself or you can pass a mean
-    # t_statistic = (mean1 - mean2) / (sqrt((std1**2 / N1) + (std2**2 / N2))) 
     pass
 
+def welch_t_test(
+    mean1: float | dict | list, 
+    std1: float | list = 0, 
+    N1: float | list = 0,
+    critical_level: float = 0.05,
+    two_tailed: bool = False,
+    left_tailed: bool = False,
+    right_tailed: bool = False,
+    hypothetical_difference: float = 0,
+    mean2: float | None = None, 
+    std2: float | None = None,
+    N2: float | None = None,
+) -> dict:
+    # maybe change this to: def welch_t_test(*args, **kwargs) -> dict:
+    #   return _independant_t_test(*args, **kwargs, equal_var=False) instead of passing all args again
+    return _independant_t_test(
+        mean1=mean1, 
+        std1=std1, 
+        N1=N1, 
+        critical_level=critical_level, 
+        two_tailed=two_tailed, 
+        left_tailed=left_tailed, 
+        right_tailed=right_tailed, 
+        equal_var=False, 
+        hypothetical_difference=hypothetical_difference, 
+        mean2=mean2,
+        std2=std2,
+        N2 = N2,
+)
 
-def students_t_test():
-    # t-test of diff of two means with similar variances - two sample
-    pass
+def students_t_test(
+    mean1: float | dict | list, 
+    std1: float | list = 0, 
+    N1: float | list = 0,
+    critical_level: float = 0.05,
+    two_tailed: bool = False,
+    left_tailed: bool = False,
+    right_tailed: bool = False,
+    hypothetical_difference: float = 0,
+    mean2: float | None = None, 
+    std2: float | None = None,
+    N2: float | None = None,
+) -> dict:
+    return _independant_t_test(
+        mean1=mean1, 
+        std1=std1, 
+        N1=N1, 
+        critical_level=critical_level, 
+        two_tailed=two_tailed, 
+        left_tailed=left_tailed, 
+        right_tailed=right_tailed, 
+        equal_var=True, 
+        hypothetical_difference=hypothetical_difference, 
+        mean2=mean2,
+        std2=std2,
+        N2 = N2,
+)
+
 
 def paired_t_test():
     # t-test on paired observations 
     pass
+
+def  anova_test():
+    pass
+
 
 # main functions
 
@@ -226,10 +295,6 @@ def compare_means(df: pd.DataFrame, cols: list[str]):
         # ANOVA
         pass
 
-def check_significant_difference():
-    """Checks if the difference of a sample mean is significantly different to a given value"""
-    pass
-
 def compare_proportions():
     pass
 
@@ -242,17 +307,3 @@ def compare_variances():
 def relationship_analysis(df: pd.DataFrame, col: str | list):
     pass
 
-test1 = welch_t_test(10, 2, 100, mean2=12, std2=3, N2=120, left_tailed=True)
-
-test2 = welch_t_test([10, 12], [2, 3], [100, 120], left_tailed=True)
-
-test3 = welch_t_test({
-    "mean1": 10, "mean2": 12,
-    "std1": 2, "std2": 3,
-    "N1": 100, "N2": 120,
-    "critical_level": 0.05
-}, left_tailed=True)
-
-print(test1)
-print(test2)
-print(test3)
