@@ -1,6 +1,6 @@
 data/
 ideas.md
-test.py
+*test.py
 __pycache__/
 *.py[cod]
 .venv/

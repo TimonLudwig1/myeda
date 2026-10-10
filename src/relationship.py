@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from math import sqrt
 import pandas as pd 
@@ -5,6 +6,8 @@ from src.column_utils import _get_dtype, _check_if_string
 from typing import Any
 import scipy.stats
 import pandas as pd
+
+# split this up into seperate files soon!
 
 # config variables and constants
 
@@ -19,7 +22,7 @@ VALID_COMBINATIONS_WELCH_T_TEST = [
 ]
 
 VALID_COMBINATIONS_ONE_SAMPLE_T_TEST = [
-    {"mean": "numeric", "std": "numeric", "n": "numeric", "hypothesized_mean": "numeric", "critical_level": "numeric"},
+    {"mean": "numeric", "std": "numeric", "N": "numeric", "hypothesized_mean": "numeric", "critical_level": "numeric"},
 ]
 
 REQUIRED_KEYS_WELCH_TEST = {
@@ -35,21 +38,22 @@ REQUIRED_KEYS_ONE_SAMPLE_TEST = {
 # helpers
 
 def _check_if_valid_for_t_test(params: dict[Any, Any], welch_or_student) -> None:
-    # change this so it is dependant on the name. Mean can be negative
     for name, value in params.items():
         if welch_or_student:
             if isinstance(value, list):
-                for item in value:
-                    if item <= 0:
-                        raise ValueError(f"Invalid value for: {item}. {item} is smaller than 0")
+                if "N" in name:
+                    for item in value:
+                        if item <= 0:
+                            raise ValueError(f"Invalid value for: {name}. {item} is smaller than or equal to 0")
                 continue
         if value is None:
             continue
         elif isinstance(value, bool):
             continue
         elif isinstance(value, (int, float)):
-            if value <= 0:
-                raise ValueError(f"Invalid value for: {value}. {value} is smaller than 0")
+            if ("N" in name or "std" in name) and value <= 0:
+                raise ValueError(f"Invalid value for: {name}. {value} is smaller than 0")
+            continue
         else:
             raise ValueError(f"Invalid data type {type(value)} for {name}. Argument has to either be a number, bool or a list, depending on the argument")
 
@@ -80,18 +84,56 @@ def significance_check(p_value: float, critical_level: float):
 
     return stat_significance, is_significant
 
-def calculate_confidence_interval(mean: float, t_crit: float, std: float | None = None, n: float | None = None, standard_error: float | None = None) -> tuple[float, float]:
+def format_ci(lower: float, upper: float) -> str:
+    left = "(" if math.isinf(lower) else "["
+    right = ")" if math.isinf(upper) else "]"
+    return f"{left}{lower} , {upper}{right}"
+
+def _tailed_test(two_tailed: bool, left_tailed: bool, right_tailed: bool,t_statistic, dof, critical_level: float, mean: float, standard_error: float):
+    if two_tailed: 
+        t_crit = float(scipy.stats.t.ppf((1 - (critical_level/2)), dof))
+        p_value = float(2 * scipy.stats.t.sf(abs(t_statistic), dof))
+        stat_significance, is_significant =  significance_check(p_value, critical_level)
+        test_type = "two_tailed"
+        lower_bound, upper_bound = calculate_confidence_interval(mean=mean, t_crit=t_crit, standard_error=standard_error, type="two")   
+
+    elif left_tailed: # mean1 significantly smaller than mean2 
+        t_crit = float(scipy.stats.t.ppf((critical_level), dof))
+        p_value = float(scipy.stats.t.cdf(t_statistic, dof))
+        stat_significance, is_significant = significance_check(p_value, critical_level)
+        test_type = "left_tailed"
+        lower_bound, upper_bound = calculate_confidence_interval(mean=mean, t_crit=t_crit, standard_error=standard_error, type="left")   
+
+    elif right_tailed: # mean1 significantly larger than mean2 
+        t_crit = float(scipy.stats.t.ppf((1 - critical_level), dof))
+        p_value = float(scipy.stats.t.sf(t_statistic, dof))
+        stat_significance, is_significant = significance_check(p_value, critical_level)
+        test_type = "right_tailed"
+        lower_bound, upper_bound = calculate_confidence_interval(mean=mean, t_crit=t_crit, standard_error=standard_error, type="right")   
+
+    else:
+        raise ValueError("at least one test type has to be chosen. If you're using a dict, test type has to be passed as a seperate argument outside the dictionary")
+    
+    ci = format_ci(lower_bound, upper_bound)
+
+    return t_crit, p_value, stat_significance, is_significant, test_type, lower_bound, upper_bound, ci
+
+def calculate_confidence_interval(mean: float, t_crit: float, std: float | None = None, n: float | None = None, standard_error: float | None = None, type: str | None = "two") -> tuple[float, float]:
 
     if standard_error is None:
         if std is None or n is None: 
             raise ValueError("Missing required arguments")
-        lower_bound = round(mean - (t_crit * (std / sqrt(n))), 4) 
-        upper_bound = round(mean + (t_crit * (std / sqrt(n))), 4) 
-    else:
-        lower_bound = round(mean - (t_crit * standard_error), 4)
-        upper_bound = round(mean + (t_crit * standard_error), 4)
+        standard_error = (std / sqrt(n))
 
-    return lower_bound, upper_bound
+    margin = abs(t_crit) * standard_error
+
+    if type == "two":
+        return round(mean - margin, 4), round(mean + margin, 4)
+    elif type == "right": 
+        return round(mean - margin, 4), math.inf
+    elif type == "left":
+        return -math.inf, round(mean + margin, 4)
+    raise ValueError(f"Unknown type: {type}")
     
 
 def _independant_t_test(
@@ -186,32 +228,15 @@ def _independant_t_test(
             pooled_variance = ((((N1 - 1)*(std1**2)) + ((N2 - 1)*std2**2)) / (N1 + N2 - 2)) # type: ignore
             standard_error = sqrt(pooled_variance * ((1/N1) + (1/N2)))  # type: ignore
             dof = (N1 + N2 - 2) # type: ignore
+            
         else:
             standard_error = sqrt((std1**2 / N1) + (std2**2 / N2)) # type: ignore
             dof = (((std1**2/N1) + (std2**2/N2))**2) / (((std1**2 / N1)**2 / (N1 - 1)) + ((std2**2 / N2)**2 / (N2 - 1)))  # type: ignore
 
-        t_statistic = ((mean1 - mean2) - hypothetical_difference) / standard_error  # type: ignore
+        diff_in_means = ((mean1 - mean2) - hypothetical_difference) # type: ignore
+        t_statistic = diff_in_means / standard_error  
         
-        if two_tailed: 
-            t_crit = float(scipy.stats.t.ppf((1 - (critical_level/2)), dof))
-            p_value = float(2 * scipy.stats.t.sf(abs(t_statistic), dof))
-            stat_significance, is_significant =  significance_check(p_value, critical_level)
-            test_type = "two_tailed"
-
-        elif left_tailed: # mean1 significantly smaller than mean2 
-            t_crit = float(scipy.stats.t.ppf((critical_level), dof))
-            p_value = float(scipy.stats.t.cdf(t_statistic, dof))
-            stat_significance, is_significant = significance_check(p_value, critical_level)
-            test_type = "left_tailed"
-
-        elif right_tailed: # mean1 significantly larger than mean2 
-            t_crit = float(scipy.stats.t.ppf((1 - critical_level), dof))
-            p_value = float(scipy.stats.t.sf(t_statistic, dof))
-            stat_significance, is_significant = significance_check(p_value, critical_level)
-            test_type = "right_tailed"
-        
-        else:
-            raise ValueError("at least one test type has to be chosen. If you're using a dict, test type has to be passed as a seperate argument outside the dictionary")
+        t_crit, p_value, stat_significance, is_significant,test_type, lower_bound, upper_bound, ci = _tailed_test(two_tailed, left_tailed, right_tailed, t_statistic, dof, critical_level, diff_in_means, standard_error)
 
         results = {
             "significance": stat_significance,
@@ -219,6 +244,10 @@ def _independant_t_test(
             "dof": dof,
             "p_value": p_value,
             "is_significant": is_significant,
+            "confidence_interval": ci,
+            "lower_bound": lower_bound,
+            "upper_bound": upper_bound,
+            "t_crit": t_crit,
         }
         results.update(params)
 
@@ -228,23 +257,36 @@ def _independant_t_test(
         raise ValueError("Invalid combination of datatypes. mean1, std1 and N1 are required arguments. If you do not pass a list provide the other value as a seperate argument")
 
 def one_sample_t_test(
-    mean: float | str | dict,
-    hypothesized_mean: float | None = None,
+    mean: float | str | dict | list[str | float], 
+    hypothesized_mean: float | None = 0,
     std: float | None = None,
     n: float | None = None,
     critical_level: float = 0.05,
+    paired: bool = False,
     two_tailed: bool = False,
     left_tailed: bool = False,
     right_tailed: bool = False,
     df: pd.DataFrame | None = None,
     ):
 
-    # mean of column against given value - you can pass either just the column and it calculates the mean itself or you can pass a mean
-
     if df is not None: 
-        if not isinstance(mean, str):
+        if paired: 
+            if isinstance(mean, list):
+                _check_if_string(mean)
+                if len(mean) > 2:
+                    raise ValueError(f"{mean} contains too many arguments. For a paired test pass only two columns")
+                mean1 = _calculate_mean(df=df, cols=mean[0])    # type: ignore
+                mean2 = _calculate_mean(df=df, cols=mean[1])    # type: ignore
+                df["differences"] = df[mean[0]] - df[mean[1]] 
+                mean = mean1 - mean2    # type: ignore
+                std = df["differences"].std()
+            else: 
+                raise ValueError("when working with a DataFrame for a paired test, pass the columns for the paired values as a list of column names as str.")
+            
+        elif not isinstance(mean, str):
             raise ValueError(f"if you're working with a DataFrame, pass a string of the column you want to use the mean of")
-        mean = _calculate_mean(df, cols=mean)
+        else:
+            mean = _calculate_mean(df, cols=mean)  
 
     if isinstance(mean, dict):
         params = mean.copy()
@@ -261,15 +303,28 @@ def one_sample_t_test(
         param_types = {
             "mean": _get_dtype(type(mean)),
             "std": _get_dtype(type(std)),
-            "n":_get_dtype(type(n)),
+            "N":_get_dtype(type(n)),
             "hypothesized_mean": _get_dtype(type(hypothesized_mean)), 
             "critical_level": _get_dtype(type(critical_level)),            
         }
+
     else:
+        if paired:
+            # could write a small helper for numeric and len check
+            if isinstance(mean, list):
+                for _ in mean:
+                    if not isinstance(_, (int, float)):
+                        raise ValueError(f"Invalid data type {type(_)} for {_}. Value for both means have to be numeric")
+                if len(mean) > 2:
+                    raise ValueError(f"{std} contains too many arguments. For a paired test pass only two values")
+                mean1 = mean[0]    
+                mean2 = mean[1]  
+                mean = mean1 - mean2    # type: ignore
+
         params = {
             "mean": mean,
             "std": std,
-            "n":n,
+            "N":n,
             "hypothesized_mean": hypothesized_mean, 
             "critical_level": critical_level,
         }
@@ -277,9 +332,9 @@ def one_sample_t_test(
         param_types = {
             "mean": _get_dtype(type(mean)),
             "std": _get_dtype(type(std)),
-            "n":_get_dtype(type(n)),
+            "N":_get_dtype(type(n)),
             "hypothesized_mean": _get_dtype(type(hypothesized_mean)), 
-            "critical_level": _get_dtype(type(critical_level)),            
+            "critical_level": _get_dtype(type(critical_level)),          
         }
 
     _check_if_valid_for_t_test(params, welch_or_student=False)
@@ -297,45 +352,33 @@ def one_sample_t_test(
         dof = n - 1 # type: ignore
         t_statistic = (mean - hypothesized_mean) / standard_error   # type: ignore
 
-        if two_tailed:
-            t_crit = float(scipy.stats.t.ppf((1 - (critical_level/2)), dof))
-            p_value = float(2 * scipy.stats.t.sf(abs(t_statistic), dof))
-            stat_significance, is_significant =  significance_check(p_value, critical_level)
-            test_type = "two_tailed"
+        t_crit, p_value, stat_significance, is_significant,test_type, lower_bound, upper_bound, ci = _tailed_test(two_tailed, left_tailed, right_tailed, t_statistic, dof, critical_level, mean, standard_error)    # type: ignore
 
-        elif left_tailed: 
-            t_crit = float(scipy.stats.t.ppf((critical_level), dof))
-            p_value = float(scipy.stats.t.cdf(t_statistic, dof))
-            stat_significance, is_significant = significance_check(p_value, critical_level)
-            test_type = "left_tailed"
+        results = {
+            "significance": stat_significance,
+            "test_type": test_type,
+            "dof": dof,
+            "p_value": p_value,
+            "is_significant": is_significant,
+            "confidence_interval": ci,
+            "lower_bound": lower_bound,
+            "upper_bound": upper_bound,
+            "t_crit": t_crit,
+        }
+        if paired:
+            params = {
+                "diff_in_means": mean,
+                "std_of_diff": std,
+                "N":n,
+                "hypothesized_mean": hypothesized_mean, 
+                "critical_level": critical_level,
+            }
+        results.update(params)
 
-        elif right_tailed:
-            t_crit = float(scipy.stats.t.ppf((1 - critical_level), dof))
-            p_value = float(scipy.stats.t.sf(t_statistic, dof))
-            stat_significance, is_significant = significance_check(p_value, critical_level)
-            test_type = "right_tailed"
+        return results
 
-        else:
-            raise ValueError("at least one test type has to be chosen. If you're using a dict, test type has to be passed as a seperate argument outside the dictionary")
     else:
         raise ValueError("Invalid combination of datatypes")
-
-    lower_bound, upper_bound = calculate_confidence_interval(mean, t_crit, standard_error=standard_error)   # type: ignore
-    ci = f"[{lower_bound} , {upper_bound}]"
-
-    results = {
-        "significance": stat_significance,
-        "test_type": test_type,
-        "dof": dof,
-        "p_value": p_value,
-        "is_significant": is_significant,
-        "confidence_interval": ci,
-        "lower_bound": lower_bound,
-        "upper_bound": upper_bound,
-    }
-    results.update(params)
-
-    return results
 
 
 def welch_t_test(
@@ -366,7 +409,7 @@ def welch_t_test(
         mean2=mean2,
         std2=std2,
         N2 = N2,
-)
+    )
 
 def students_t_test(
     mean1: float | dict | list, 
@@ -394,12 +437,32 @@ def students_t_test(
         mean2=mean2,
         std2=std2,
         N2 = N2,
-)
+    )
 
 
-def paired_t_test():
-    # t-test on paired observations 
-    pass
+def paired_t_test(
+    mean: float | str | dict | list[str | float], 
+    hypothesized_mean: float | None = 0,
+    std: float | None = None,
+    n: float | None = None,
+    critical_level: float = 0.05,
+    two_tailed: bool = False,
+    left_tailed: bool = False,
+    right_tailed: bool = False,
+    df: pd.DataFrame | None = None,
+) -> dict:
+    return one_sample_t_test(
+        mean=mean,
+        hypothesized_mean=hypothesized_mean,
+        std=std,
+        n=n,
+        critical_level=critical_level,
+        paired=True,
+        two_tailed=two_tailed,
+        left_tailed=left_tailed,
+        right_tailed=right_tailed,
+        df=df,
+    ) 
 
 def  anova_test():
     pass
