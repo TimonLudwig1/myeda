@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from collections.abc import Callable
 from typing import Any
-from column_utils import _is_valid_dtype, _get_dtype, _check_if_string
+from src.column_utils import _is_valid_dtype, _get_dtype, _check_if_string
 
     
 # plotting functions 
@@ -257,7 +257,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
      
         # here: x and y but no other cols - so plots for 2 variables.
         else:
-            types = [_get_dtype(x_col), _get_dtype(y_col)]
+            types = [_get_dtype(df[x_col].dtype), _get_dtype(df[y_col].dtype)]
             key = tuple(sorted(
                 types,
                 key=lambda dtype: TYPE_ORDER[dtype]
@@ -281,6 +281,3 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
 
     if other_cols is not None:
          raise ValueError("To plot more than one variable, fill y_col first. other_cols is for additional variables to consider for plotting, not for plotting more than one variable.")
-
-
-
