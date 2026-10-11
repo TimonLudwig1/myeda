@@ -1,0 +1,1 @@
+# F-test (2 groups) or Levene's test (>2 groups)
