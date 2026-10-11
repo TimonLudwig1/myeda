@@ -64,3 +64,27 @@ def _tailed_test(two_tailed: bool, left_tailed: bool, right_tailed: bool,t_stati
 
     return t_crit, p_value, stat_significance, is_significant, test_type, lower_bound, upper_bound, ci
 
+def f_test(k: float, N: float, within_group_variance: float, between_group_variance: float, critical_level: float = 0.05, two_tailed: bool = False, left_tailed: bool = False, right_tailed: bool = False):
+    f_statistic = between_group_variance / within_group_variance
+    dof_between = k - 1
+    dof_within = N - k
+
+    if two_tailed:
+        f_crit = float(scipy.stats.f.ppf(1 - (critical_level/2), dof_between, dof_within))
+        p_value = float(2* scipy.stats.f.sf(f_statistic, dof_between, dof_within))
+        stat_significance, is_significant = significance_check(p_value, critical_level)
+        test_type = "two_tailed"
+    elif left_tailed:
+        f_crit = float(scipy.stats.f.ppf((critical_level), dof_between, dof_within))
+        p_value = float(scipy.stats.f.cdf(f_statistic, dof_between, dof_within))
+        stat_significance, is_significant = significance_check(p_value, critical_level)
+        test_type = "left_tailed"
+    elif right_tailed:
+        f_crit = float(scipy.stats.f.ppf((1 - critical_level), dof_between, dof_within))
+        p_value = float(scipy.stats.f.sf(f_statistic, dof_between, dof_within))
+        stat_significance, is_significant = significance_check(p_value, critical_level)
+        test_type = "right_tailed"
+    else:
+        raise ValueError("at least one test type has to be chosen. If you're using a dict, test type has to be passed as a seperate argument outside the dictionary")
+
+    return f_statistic, f_crit, p_value, stat_significance, is_significant, test_type 

@@ -2,7 +2,7 @@ from src.column_utils import _get_dtype, _check_if_string
 from typing import Any
 import pandas as pd
 
-def _check_if_valid_for_t_test(params: dict[Any, Any], welch_or_student) -> None:
+def _check_if_valid_for_test(params: dict[Any, Any], welch_or_student) -> None:
     for name, value in params.items():
         if welch_or_student:
             if isinstance(value, list):
