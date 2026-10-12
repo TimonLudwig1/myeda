@@ -376,9 +376,56 @@ def  anova_test(
 ):
 
     if df is not None:
-        pass 
+        # pass a list of col names you want to test as str
+        if not isinstance(means, list):
+            raise ValueError("{means} must be a list")
+        # calculate mean already uses _check_if_string, use list + loop, because I don't want a dict
+        means_values = []
+        N_per_group = []
+        num_groups = len(means)
+        within_sq_dev = 0
 
-    if isinstance(num_groups, dict):
+        for col in means:
+            group = df[col]
+
+            group_mean = _calculate_mean(df, col)
+            group_n = df[col].count()
+            means_values.append(group_mean)
+            N_per_group.append(group_n)
+
+            # within group sum of squares
+            within_sq_dev += ((group - group_mean) ** 2).sum()
+
+        N = sum(N_per_group)
+        # weighted grand mean
+        grand_mean = sum(
+            n * mean for n, mean in zip(N_per_group, means_values)
+        ) / N
+
+        # between groups sum of squares
+        sq_dev_groups = sum(
+            n * (mean - grand_mean)**2 for n, mean in zip(N_per_group, means_values)
+        )
+
+        between_group_variance = sq_dev_groups / (num_groups - 1)
+        within_group_variance = within_sq_dev / (N - num_groups)
+
+        params = {
+                    "num_groups": num_groups,
+                    "N_per_group": N_per_group,
+                    "means": means_values,
+                    "critical_level": critical_level,
+                    "within_group_variance": within_group_variance,
+                    "between_group_variance": between_group_variance,
+                }
+        
+        param_types = {}
+        
+        for k, v in params.items():
+            param_types[k] = _get_dtype(type(v)) if v is not None else "None"
+
+
+    elif isinstance(num_groups, dict):
         params = num_groups.copy()
 
         if params.keys() != REQUIRED_KEYS_ANOVA:
