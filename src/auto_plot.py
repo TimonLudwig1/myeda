@@ -30,7 +30,7 @@ def plot_scatter(df: pd.DataFrame, x_col: str, y_col: str, other_col: str | list
     else:
         ax.scatter(df[x_col], df[y_col])
 
-        ax.set_title(f"{x_col} against {y_col}")
+        ax.set_title(f"{y_col} against {x_col}")
         ax.set_xlabel(f"{x_col}")
         ax.set_ylabel(f"{y_col}")
         ax.legend(title=other_col)
