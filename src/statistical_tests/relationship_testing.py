@@ -10,6 +10,8 @@ from scipy.stats import rankdata
 def _array_conversion(cols, b):
     if not isinstance(cols, (list, np.ndarray)) or not isinstance(b, (list, np.ndarray)):
         raise ValueError("Invalid arg data types")
+    if len(cols) != len(b):
+        raise ValueError("arrays need to have the same amount of entries")
     if isinstance(cols, list):
         x_arr = np.array(cols)
     else:

@@ -6,6 +6,7 @@ def _is_valid_dtype(dtype) -> bool:
         pd.api.types.is_numeric_dtype(dtype)
         or pd.api.types.is_object_dtype(dtype)
         or pd.api.types.is_datetime64_any_dtype(dtype)
+        or isinstance(dtype, pd.CategoricalDtype)
     )
 
 def _get_dtype(dtype) -> str:
@@ -13,7 +14,7 @@ def _get_dtype(dtype) -> str:
         return "numeric"
     elif dtype is list: 
             return "list"
-    elif pd.api.types.is_object_dtype(dtype):
+    elif pd.api.types.is_object_dtype(dtype) or isinstance(dtype, pd.CategoricalDtype):
         return "categorical"
     elif pd.api.types.is_datetime64_any_dtype(dtype):
         return "datetime"

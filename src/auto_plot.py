@@ -23,7 +23,7 @@ def plot_scatter(df: pd.DataFrame, x_col: str, y_col: str, other_col: str | list
                     group[y_col],
                     label=category
                 )
-            ax.set(title=f"{x_col} against {y_col}", xlabel=x_col, ylabel=y_col)
+            ax.set(title=f"{y_col} against {x_col}", xlabel=x_col, ylabel=y_col)
             ax.legend()
             plt.show()
             return fig, ax
@@ -33,7 +33,6 @@ def plot_scatter(df: pd.DataFrame, x_col: str, y_col: str, other_col: str | list
         ax.set_title(f"{y_col} against {x_col}")
         ax.set_xlabel(f"{x_col}")
         ax.set_ylabel(f"{y_col}")
-        ax.legend(title=other_col)
         plt.tight_layout()
         plt.show()
         return fig, ax
@@ -47,9 +46,8 @@ def plot_stacked_bar(df: pd.DataFrame, x_col: str, y_col: str, other_col: str, a
         .fillna(0)
     )
     pivot.plot(kind="bar", stacked=True, ax=ax)
-    ax.set_label(x_col)
-    ax.legend(title=f"Sum of {y_col}")
-    ax.legend(title=", ".join(other_col), bbox_to_anchor=(1.02, 1), loc="upper left")
+    ax.set(title=f"{agg} of {y_col} by {x_col}", xlabel=x_col, ylabel=y_col)
+    ax.legend(title=other_col, bbox_to_anchor=(1.02, 1), loc="upper left")
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
     plt.tight_layout()
     plt.show()
@@ -86,11 +84,10 @@ def plot_heatmap(df: pd.DataFrame, x_col: str, y_col: str, other_col: str, agg: 
         .unstack()
         .fillna(0)
     )
-    sns.heatmap(pivot, cmap="magma")
-    ax.set_title(f"{x_col} against {y_col} and {other_col}")
-    ax.set_xlabel(f"{x_col}")
-    ax.set_ylabel(f"{y_col}")
-    ax.legend(title=other_col)
+    sns.heatmap(pivot, cmap="magma", ax=ax, cbar_kws={"label": f"{agg} of {y_col}"})
+    ax.set_title(f"{agg} of {y_col} by {x_col} and {other_col}")
+    ax.set_xlabel(other_col)
+    ax.set_ylabel(x_col)
     plt.tight_layout()
     plt.show()
     return fig, ax
@@ -99,7 +96,6 @@ def plot_bar(df: pd.DataFrame, x_col: str, y_col: str | None):
     fig, ax = plt.subplots()
     ax.bar(df[x_col], df[y_col])
     ax.set(title=f"{y_col} for {x_col}", xlabel=x_col, ylabel=y_col)
-    ax.legend()
     fig.tight_layout()
     plt.show()
     return fig, ax
@@ -187,6 +183,7 @@ PLOT_MAP: dict[tuple, Callable[..., Any]] = {
     ("numeric", "categorical", "categorical"): _handle_num_cat_cat,
 }
 
+# extend this so you could also pass a list or array without a df
 def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols: str | list[str] | None = None, agg: str = "sum", additive: bool=False, distribution: bool = False, **kwargs):
     """
     Automatically generates a plot based on the provided DataFrame and specified columns.
@@ -223,7 +220,7 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
 
         if other_cols is not None:
             if isinstance(other_cols, str):
-                types = [_get_dtype(df[other_cols]), _get_dtype(df[y_col]), _get_dtype(df[x_col])]               
+                types = [_get_dtype(df[other_cols].dtype), _get_dtype(df[y_col].dtype), _get_dtype(df[x_col].dtype)]
                 key = tuple(sorted( # sorted method loops through types
                     types,
                     key=lambda dtype: TYPE_ORDER[dtype] #lambda  <parameter> : <expression> (return)
@@ -279,5 +276,5 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
             col = x_col
         ) 
 
-    if other_cols is not None:
+    if y_col is None and other_cols is not None:
          raise ValueError("To plot more than one variable, fill y_col first. other_cols is for additional variables to consider for plotting, not for plotting more than one variable.")
