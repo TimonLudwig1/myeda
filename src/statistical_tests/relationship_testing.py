@@ -1,4 +1,6 @@
 # association or correlation? pearson, chi-squared, spearman
+import warnings
+from column_utils import _get_dtype
 import numpy as np 
 from numpy.typing import NDArray
 from src.column_utils import _check_if_string
@@ -94,38 +96,63 @@ def spearman_correlation(
 
     return (dev_x * dev_y).sum() / np.sqrt((dev_x**2).sum() * (dev_y**2).sum())
 
-def chi_sq_independence(table: pd.DataFrame, alpha: float = 0.05) -> dict:
+def chi_sq_independence(table: pd.DataFrame, alpha: float = 0.05, Yates: bool = True) -> dict:
+    """
+    pass Yates = Flase if you do not want the Yate's continuity correction. Default: True
+    """
     # start just with a ready crosstab - later pass arrays/lists and It'll make the crosstab automatically
     # add input checks next
-    num_rows = len(table)
-    num_cols = len(table.columns)
+    if (table < 0).any().any():
+        raise ValueError("Invalid sample data. Values cannot be negative")
     totals_cols = table.sum(axis=0) # underneath
     totals_rows = table.sum(axis=1) # right
-    grand_total = table.sum().sum()
-    x2_values = []
 
-    for i in range(num_rows):              # for every row : 1 then every col; 2 then every col; ...
-        for j in range(num_cols):  # for every col
-            # .iloc[row, col]
-            observed = table.iloc[i, j]
-            expected = (totals_rows.iloc[i] * totals_cols.iloc[j]) / grand_total
-            single_x2 = ((expected - observed)**2) / expected
-            x2_values.append(single_x2)
-    X2 = sum(x2_values)
+    if (totals_cols == 0).any() or (totals_rows == 0).any():
+        raise ValueError("Invalid smaple data. Row or column totals cannot be equal to zero")
+    for i in table.columns:
+        if _get_dtype(table[i] != "numeric"):
+            raise ValueError(f"Non numeric entries found in column: {i}")
+    num_rows = len(table)
+    num_cols = len(table.columns)
+    num_data_points = num_rows*num_cols
+    grand_total = table.sum().sum()
+
+    observed = table.to_numpy()
+
+    n = observed.sum() # .sum() on a xd array just sums up every entry
+
+    expected = np.outer(totals_cols, totals_rows) / grand_total
+
+    if (expected == 0).any():   # any on a np.array without specifying axis (or axis=None) checks entire array
+        raise ValueError("Empty row or column: expected count of 0.")
+
+    if Yates:
+        X2 = ((expected - observed)**2 / expected).sum()        
+    else:
+        X2 = ((abs(expected - observed) - 0.5 )**2 / expected).sum()
+
+    if expected.min() < 1 or (expected < 5).mean() > 0.2:
+        warnings.warn("Expected counts are small; the chi-square approximation may be unreliable.")
+
     dof = (num_rows - 1) * (num_cols - 1)
     chi2_crit = chi2.ppf(1 - alpha, dof)  # inverse of cdf, gives quantile for pct value
     p_value = float(chi2.sf(X2, dof))  # .sf : probability of right tail for given X2 and dof
+    V = np.sqrt(X2 / (n * min(num_rows - 1, num_cols - 1)))
     stat_significance, is_significant = significance_check(p_value, alpha)
 
     results = {
-            "significance": stat_significance,
-            "test_type": "Chi-Square Test of Independence",
-            "dof": dof,
-            "p_value": p_value,
-            "is_significant": is_significant,
-            "X²": X2,
-            "chi2_crit": chi2_crit,
+        "n": n,
+        "Cramér's V": V,
+        "sample_data_points": num_data_points,
+        "significance": stat_significance,
+        "test_type": "Chi-Square Test of Independence",
+        "dof": dof,
+        "p_value": p_value,
+        "is_significant": is_significant,
+        "X²": X2,
+        "chi2_crit": chi2_crit,
         }
+
     return results
 
 
