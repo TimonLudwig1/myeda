@@ -183,7 +183,7 @@ PLOT_MAP: dict[tuple, Callable[..., Any]] = {
     ("numeric", "categorical", "categorical"): _handle_num_cat_cat,
 }
 
-# extend this so you could also pass a list or array without a df
+# extend this so you could also pass a list or array without a df + rewrite this, with dict lookup and no if elif chains
 def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols: str | list[str] | None = None, agg: str = "sum", additive: bool=False, distribution: bool = False, **kwargs):
     """
     Automatically generates a plot based on the provided DataFrame and specified columns.

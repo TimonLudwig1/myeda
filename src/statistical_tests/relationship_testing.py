@@ -1,6 +1,6 @@
 # association or correlation? pearson, chi-squared, spearman
 import warnings
-from column_utils import _get_dtype
+from src.column_utils import _get_dtype
 import numpy as np 
 from numpy.typing import NDArray
 from src.column_utils import _check_if_string
@@ -9,7 +9,41 @@ from src.statistical_tests.input_validation import _calculate_mean
 from src.statistical_tests.stats_utils import significance_check
 from scipy.stats import rankdata, chi2
 
-# helpers
+
+#handler and helper
+def _handle_relationship_input(
+    data: pd.DataFrame | dict[str, list] | None, 
+    cols: list[str] | list[float] | NDArray[np.float64] | None = None, 
+    b: list[float] | NDArray[np.float64] | None = None, 
+): 
+
+    if data is not None:
+        if isinstance(data, pd.DataFrame):
+            df_raw = data
+        elif isinstance(data, dict):
+            df_raw = pd.DataFrame(data)
+
+        if cols is not None:
+            if isinstance(cols, list):
+                _check_if_string(cols)
+                df = df_raw[cols]
+                return df
+            else:
+                raise ValueError("cols is not a list of strings. When working with a DataFrame, pass a list of strings")
+            
+        else:
+            df = df_raw.iloc[:, [0, 2]] # take first two cols if cols is not specified but df/dict passed
+            return df
+        
+    elif data is None and cols is not None and b is not None:
+        df = pd.DataFrame(
+            data=[cols, b]
+        )
+        return df
+    
+    else:
+        raise ValueError("Invalid combination of args")
+
 def _array_conversion(cols, b):
     if not isinstance(cols, (list, np.ndarray)) or not isinstance(b, (list, np.ndarray)):
         raise ValueError("Invalid arg data types")
@@ -29,7 +63,11 @@ def _array_conversion(cols, b):
         raise ValueError("array contains non-numeric values")
 
     return x_arr, y_arr
-    
+
+def heuristic_corr_choice():
+    pass
+
+# add dict input option + when no cols selected always just use first + second   
 def pearson_correlation(
         df: pd.DataFrame | None = None, 
         cols: list[str] | list[float] | NDArray[np.float64] | None = None, 
@@ -65,7 +103,7 @@ def pearson_correlation(
 
     return sum_of_products / np.sqrt(ss_x*ss_y)
 
-# add option to just pass a list of vals or a np.array and no df
+# add dict input option + when no cols selected always just use first + second
 def spearman_correlation(
         df: pd.DataFrame | None = None, 
         cols: list[str] | list[float] | NDArray[np.float64] | None = None, 
@@ -77,8 +115,6 @@ def spearman_correlation(
             raise ValueError(f"exactly two columns required, got {len(cols)}")
 
         x, y = cols
-
-        data = df[[x, y]].dropna()
 
         rank_x = df[x].rank().to_numpy()
         rank_y = df[y].rank().to_numpy()
@@ -96,12 +132,48 @@ def spearman_correlation(
 
     return (dev_x * dev_y).sum() / np.sqrt((dev_x**2).sum() * (dev_y**2).sum())
 
-def chi_sq_independence(table: pd.DataFrame, alpha: float = 0.05, Yates: bool = True) -> dict:
+def chi_sq_independence(table: pd.DataFrame | dict[str, list], cols: list[str] | None = None, alpha: float = 0.05, Yates: bool = True, is_crosstab: bool = False) -> dict:
     """
-    pass Yates = Flase if you do not want the Yate's continuity correction. Default: True
+    Performes a Chi-squared test of independence, based on the data you provide.
+
+    Parameters:
+    - table: pd.Dataframe | dict | pre made pd.crosstab - the input table containing the observations for the test. Pass is_crosstab = True if you are working with a premade crosstab
+    - cols: list[str] optional - The names of the two columns you want to create the crosstab from. If None, the first and second column will be used.
+    - alpha: the significance level for the test. Default: = 0.05.
+    - Yates: True | False if you want to use the Yate's continuity correction. Default: True
+    - is_crosstab: True | False if your DataFrame is already a crosstable. Default: False
     """
-    # start just with a ready crosstab - later pass arrays/lists and It'll make the crosstab automatically
-    # add input checks next
+    # still more input data (type) checks missing 
+    if cols is not None:
+        _check_if_string(cols)
+
+        if isinstance(table, dict):
+            df = pd.DataFrame(table)
+            table = pd.crosstab(df[cols[0]], df[cols[1]])    
+
+        elif isinstance(table, pd.DataFrame):
+            if is_crosstab:
+                table = table
+            else:
+                if table.shape[1] < 2:
+                    raise ValueError("Invalid DataFrame shape. Need at least two columns to build a crosstab")
+                table = pd.crosstab(table[cols[0]], table[cols[1]])
+        else: 
+            raise ValueError("Invalid input datatype")
+    else:
+        if isinstance(table, dict):
+            df = pd.DataFrame(table)
+            table = pd.crosstab(df.iloc[:, 0], df.iloc[:, 1])
+        elif isinstance(table, pd.DataFrame):
+            if is_crosstab:
+                table = table
+            else:
+                if table.shape[1] < 2:
+                    raise ValueError("Invalid DataFrame shape. Need at least two columns to build a crosstab")
+                table = pd.crosstab(table.iloc[:, 0], table.iloc[:, 1])
+        else: 
+            raise ValueError("Invalid input datatype")
+
     if (table < 0).any().any():
         raise ValueError("Invalid sample data. Values cannot be negative")
     totals_cols = table.sum(axis=0) # underneath
@@ -110,18 +182,17 @@ def chi_sq_independence(table: pd.DataFrame, alpha: float = 0.05, Yates: bool = 
     if (totals_cols == 0).any() or (totals_rows == 0).any():
         raise ValueError("Invalid smaple data. Row or column totals cannot be equal to zero")
     for i in table.columns:
-        if _get_dtype(table[i] != "numeric"):
+        if _get_dtype(table[i].dtype) != "numeric":
             raise ValueError(f"Non numeric entries found in column: {i}")
     num_rows = len(table)
     num_cols = len(table.columns)
-    num_data_points = num_rows*num_cols
-    grand_total = table.sum().sum()
+    distinct_categories = num_rows*num_cols
 
     observed = table.to_numpy()
 
     n = observed.sum() # .sum() on a xd array just sums up every entry
 
-    expected = np.outer(totals_cols, totals_rows) / grand_total
+    expected = np.outer(totals_cols, totals_rows) / n
 
     if (expected == 0).any():   # any on a np.array without specifying axis (or axis=None) checks entire array
         raise ValueError("Empty row or column: expected count of 0.")
@@ -143,7 +214,7 @@ def chi_sq_independence(table: pd.DataFrame, alpha: float = 0.05, Yates: bool = 
     results = {
         "n": n,
         "Cramér's V": V,
-        "sample_data_points": num_data_points,
+        "sample_data_points": distinct_categories,
         "significance": stat_significance,
         "test_type": "Chi-Square Test of Independence",
         "dof": dof,
@@ -159,7 +230,61 @@ def chi_sq_independence(table: pd.DataFrame, alpha: float = 0.05, Yates: bool = 
     
 
 # main method
-def check_relationship():
-    # auto check if cat or num, and maybe auto check if spearman or perason with F statistic + derivative
-    pass
+def check_relationship(
+    df: pd.DataFrame | dict[str, list] | None, 
+    cols: list[str] | list[float] | NDArray[np.float64] | None = None, 
+    b: list[float] | NDArray[np.float64] | None = None, 
+    is_linear: bool | None = None,
+    alpha: float = 0.05, 
+    Yates: bool = True, 
+    is_crosstab: bool = False,
+    linear_tolerance: float = 0.08,
+    min_monotonicity: float = 0.5,
+)-> dict | float:
+    
+    data = _handle_relationship_input(data=df, cols=cols, b=b)  
 
+    param_types = {
+        _get_dtype(data.iloc[:, 0].dtype),
+        _get_dtype(data.iloc[:, 1].dtype)
+    }
+
+    if param_types == {"numeric", "numeric"}:
+        if is_linear is not None:
+            # pearson or spearman
+            if is_linear:
+                # pearson
+                return pearson_correlation(df=data, cols=cols, b=b)
+            else: 
+                # spearman
+                return spearman_correlation(df=data, cols=cols, b=b)
+        else:
+            pearson_r = pearson_correlation(df=data, cols=cols, b=b)
+            spearman_r = spearman_correlation(df=data, cols=cols, b=b)
+
+            abs_p = abs(pearson_r)
+            abs_s = abs(spearman_r)
+            
+            # Heuristic step 1: check if a meaningful monotonic relationship exists
+            if abs_s < min_monotonicity:
+                corr_type = "spearman"
+                warnings.warn(f"`is_linear` was not specified; {corr_type} was selected automatically based on a heuristic. Relationship is weak/non-monotonic (Spearman |r_s| = {abs_s:.2f}). This choice may be unreliable.")
+                return spearman_r
+
+            # step 2: check linearity via magnitude divergence between spearman and pearson
+            delta = abs_s - abs_p
+
+            if delta <= linear_tolerance:
+                corr_type = "pearson"
+                warnings.warn(f"`is_linear` was not specified; {corr_type} was selected automatically based on a heuristic. This choice may be unreliable.")
+                return pearson_r
+            else:
+                corr_type = "spearman"
+                warnings.warn(f"`is_linear` was not specified; {corr_type} was selected automatically based on a heuristic. Relationship is monotonic but non-linear (|r_s| - |r| = {delta:.3f} > {linear_tolerance}. This choice may be unreliable.")
+                return spearman_r
+
+    elif param_types == {"categorical", "categorical"}:
+        # chi2
+        return chi_sq_independence(table=data, alpha=alpha, Yates=Yates, is_crosstab=is_crosstab)    
+    else: 
+        raise ValueError("Invalid combination of input data types for variables")

@@ -14,7 +14,7 @@ def _get_dtype(dtype) -> str:
         return "numeric"
     elif dtype is list: 
             return "list"
-    elif pd.api.types.is_object_dtype(dtype) or isinstance(dtype, pd.CategoricalDtype):
+    elif pd.api.types.is_object_dtype(dtype) or isinstance(dtype, pd.CategoricalDtype) or pd.api.types.is_string_dtype(dtype):
         return "categorical"
     elif pd.api.types.is_datetime64_any_dtype(dtype):
         return "datetime"
