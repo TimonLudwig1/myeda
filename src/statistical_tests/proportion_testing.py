@@ -1,7 +1,8 @@
 # is proportion different 2 or >2 groups 
+import warnings
 from column_utils import _get_dtype, _check_if_string
 from typing import Any
-from src.statistical_tests.stats_utils import _tailed_proportion_test
+from src.statistical_tests.stats_utils import _tailed_proportion_test, significance_check
 from math import sqrt
 import numpy as np
 import numpy.typing as npt
@@ -9,7 +10,7 @@ import pandas as pd
 
 # helper
 
-def _convert_to_bool_array(success: str, fail: str, data: list[str]) -> tuple[npt.NDArray[np.bool_], int]:
+def _convert_to_bool_array(success: str, fail: str, data: list[str | bool]) -> tuple[npt.NDArray[np.bool_], int]:
     """
     Convert a list of category strings to a boolean success array.
 
@@ -31,26 +32,32 @@ def _convert_to_bool_array(success: str, fail: str, data: list[str]) -> tuple[np
             contains entries other than the two categories (the offending
             entries are listed in the message).
     """
+    if set(data) <= {0, 1}:
+        n = len(data)
+        success_array = np.array(data)
+        return success_array, n
+    else:
+        _check_if_string([success, fail])
+        _check_if_string(data)
+        
+        success = success.strip().lower()
+        fail = fail.strip().lower()
 
-    _check_if_string([success, fail])
-    success = success.strip().lower()
-    fail = fail.strip().lower()
+        if success == fail:
+            raise ValueError("success category cannot be same as fail category")
+        
+        data= [d.strip().lower() for d in data] #type: ignore
+        n = len(data)
 
-    if success == fail:
-        raise ValueError("success category cannot be same as fail category")
-    
-    data = [d.strip().lower() for d in data]
-    n = len(data)
-
-    invalid = set(data) - {success, fail}
-    if invalid:
-        raise ValueError(f"Entries other than the defined categories found: {invalid}")
-    
-    success_array = np.array([success == d for d in data])
-    return success_array, n
+        invalid = set(data) - {success, fail}
+        if invalid:
+            raise ValueError(f"Entries other than the defined categories found: {invalid}")
+        
+        success_array = np.array([success == d for d in data])
+        return success_array, n
 
 def _proportion_array_handler(
-    data: list[str] | npt.NDArray[np.bool_] | pd.Series,
+    data: list[str | bool] | npt.NDArray[np.bool_] | pd.Series,
     success: str | None = None,
     fail: str | None = None,
 ) -> tuple[float, int]:
@@ -121,7 +128,7 @@ def _proportion_array_handler(
 
     return p_hat, n
     
-
+# add option for data to be dict
 def one_samp_z_test_proportions(
     p0: float,      # hypothesized under H0
     p_hat: float | None = None,   # observed from sample
@@ -131,7 +138,7 @@ def one_samp_z_test_proportions(
     right_tailed: bool = False,
     left_tailed: bool = False,
     min_count: int = 10,
-    data: list[str] | npt.NDArray[np.bool_] | pd.Series | None = None,
+    data: list[str | bool] | npt.NDArray[np.bool_] | pd.Series | None = None,
     success: str | None = None,
     fail: str | None = None,
 ) -> dict[str, Any]:
@@ -168,7 +175,7 @@ def one_samp_z_test_proportions(
 
     Returns:
         Dict with the keys sample_proportion, hypothesized_population_proportion,
-        sample_size, z_score, z_crit, statistical_significance,
+        sample_size, z_score,, standard_error, z_crit, p_value, statistical_significance,
         is_significant and test_type. For two-tailed tests, z_crit is the
         positive critical value (the rejection region is beyond +/- z_crit).
 
@@ -193,25 +200,106 @@ def one_samp_z_test_proportions(
             f"be >= {min_count} (got n*p0 = {n * p0:.1f}, "
             f"n*(1-p0) = {n * (1 - p0):.1f})."
         )
+    standard_error = sqrt(( (p0*(1-p0)) / n))
+    z_score = (p_hat - p0) / standard_error
 
-    z_score = (p_hat - p0) / sqrt(( (p0*(1-p0)) / n))
-
-    z_crit, p_value, stat_significance, is_significant, test_type = _tailed_proportion_test(z_statistic=z_score, alpha=alpha, two_tailed=two_tailed, right_tailed=right_tailed, left_tailed=left_tailed)
+    z_crit, p_value, stat_significance, is_significant, test_type = _tailed_proportion_test(z_statistic=z_score, alpha=alpha, two_tailed=two_tailed, 
+                                                                                                                                        right_tailed=right_tailed, left_tailed=left_tailed)
 
     results = {
         "sample_proportion": p_hat,
         "hypothesized_population_proportion": p0,
         "sample_size": n,
         "z_score": z_score,
+        "standard_error": standard_error,
         "z_crit": z_crit,
+        "p_value": p_value,
         "statistical_significance": stat_significance,
         "is_significant": is_significant,
         "test_type": test_type
     }
     return results
 
-def two_samp_z_test_proportions():
-    pass
+def two_samp_z_test_proportions(
+    p1_hat: float | list[str | bool] | npt.NDArray[np.bool_] | pd.Series,
+    p2_hat: float | list[str | bool] | npt.NDArray[np.bool_] | pd.Series,
+    n1: int | list[int] | None,
+    n2: int | None,
+    alpha: float = 0.05,
+    two_tailed: bool = False,
+    right_tailed: bool = False,
+    left_tailed: bool = False,
+    min_count: int = 10, 
+    data: pd.DataFrame | dict | None = None,
+    cols: list[str] | None = None,
+    success: str | None = None,
+    fail: str | None = None,
+):
+    if sum([two_tailed, right_tailed, left_tailed]) != 1:
+            raise ValueError("Exactly one of two_tailed, left_tailed, right_tailed must be True.")
+
+    if isinstance(p1_hat, float) and isinstance(p2_hat, float):
+        if n1 is not None:
+            if isinstance(n1, list):
+                if n2 is not None:
+                    warnings.warn("n2 was passed while n1 was passed as a list. The value for n2 will be ignored")
+                if len(n1) > 2:
+                    raise ValueError(f"More than 2 entries found in list of sample_sizes. Number of entries: {len(n1)}")
+                for i in n1:
+                    if not isinstance(i, int):
+                        raise ValueError(f"Non-numeric entry found in {n1}")
+                n2 = n1[0]
+                n1 = n1[1]
+            elif isinstance(n1, int):
+                if n2 is None:
+                    raise ValueError("n2 is missing. n1 was passed as an int, so n2 must be passed as an int as well")
+                elif not isinstance(n2, int):
+                    raise ValueError(f"Invalid data type for n2. Got {type(n2)}, expected: int")
+        else:
+            raise ValueError("n1 is None. If p1_hat and p2_hat are passed as a float, n1 cannot be None")
+
+    elif isinstance((p1_hat), (list, np.ndarray, pd.Series)) and isinstance(p2_hat, (list, np.ndarray, pd.Series)):
+        p1_hat, n1 = _proportion_array_handler(data=p1_hat, success=success, fail=fail)
+        p2_hat, n2 = _proportion_array_handler(data=p2_hat, success=success, fail=fail)
+    else:
+        raise ValueError("Invalid combination of data types")
+                
+    if n1 * p1_hat < min_count or n1 * (1 - p1_hat) < min_count:
+        raise ValueError(
+            "Success-failure condition not met: n1*p1_hat and n1*(1-p1_hat) must both "
+            f"be >= {min_count} (got n1*p1_hat = {n1 * p1_hat:.1f}, "
+            f"n1*(1-p1_hat) = {n1 * (1 - p1_hat):.1f})."
+        )
+    if n2 * p2_hat < min_count or n2 * (1 - p2_hat) < min_count:
+        raise ValueError(
+            "Success-failure condition not met: n2*p2_hat and n2*(1-p2_hat) must both "
+            f"be >= {min_count} (got n2*p2_hat = {n2 * p2_hat:.1f}, "
+            f"n2*(1-p2_hat) = {n2 * (1 - p2_hat):.1f})."
+        )
+
+    p_c_hat = (n1*p1_hat + n2*p2_hat) / (n1 + n2)
+
+    standard_error = sqrt(p_c_hat * (1 - p_c_hat) * (1/n1 + 1/n2))
+    z_statistic = p1_hat - p2_hat / standard_error
+
+    z_crit, p_value, stat_significance, is_significant, test_type = _tailed_proportion_test(z_statistic=z_statistic, alpha=alpha, two_tailed=two_tailed, 
+                                                                                                                                        left_tailed=left_tailed, right_tailed=right_tailed)
+
+    results = {
+        "proportion_group_1": p1_hat,
+        "proportion_group_2": p2_hat,
+        "sample_size_1": n1,
+        "sample_size_2": n2,
+        "significance_level": alpha,
+        "z_score": z_statistic,
+        "standard_error": standard_error,
+        "z_crit": z_crit,
+        "statistical_significance": stat_significance,
+        "is_significant": is_significant,
+        "test_type": test_type
+    }
+
+    return results
 
 # main method
 

@@ -23,6 +23,7 @@ def _get_dtype(dtype) -> str:
     else: 
         raise ValueError(f"Column contains datatype not suitable for plotting or calculating. Datatype: {dtype}")
 
+# change this so it returns the list as is if it is a list[str] 
 def _check_if_string(item: Any) -> None:
     if isinstance(item, list):
         if not item:
