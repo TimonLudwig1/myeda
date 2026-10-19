@@ -64,8 +64,37 @@ def _array_conversion(cols, b):
 
     return x_arr, y_arr
 
-def heuristic_corr_choice():
-    pass
+def heuristic_corr_choice(
+    df: pd.DataFrame, 
+    cols: list[str] | list[float] | NDArray[np.float64] | None, 
+    b: list[float] | NDArray[np.float64] | None,
+    linear_tolerance: float = 0.08,
+    min_monotonicity: float = 0.5,
+):
+
+    pearson_r = pearson_correlation(df=df, cols=cols, b=b)
+    spearman_r = spearman_correlation(df=df, cols=cols, b=b)
+
+    abs_p = abs(pearson_r)
+    abs_s = abs(spearman_r)
+
+    # Heuristic step 1: check if a meaningful monotonic relationship exists
+    if abs_s < min_monotonicity:
+        corr_type = "spearman"
+        warnings.warn(f"`is_linear` was not specified; {corr_type} was selected automatically based on a heuristic. Relationship is weak/non-monotonic (Spearman |r_s| = {abs_s:.2f}). This choice may be unreliable.")
+        return spearman_r
+    
+    # step 2: check linearity via magnitude divergence between spearman and pearson
+    delta = abs_s - abs_p
+
+    if delta <= linear_tolerance:
+        corr_type = "pearson"
+        warnings.warn(f"`is_linear` was not specified; {corr_type} was selected automatically based on a heuristic. This choice may be unreliable.")
+        return pearson_r
+    else:
+        corr_type = "spearman"
+        warnings.warn(f"`is_linear` was not specified; {corr_type} was selected automatically based on a heuristic. Relationship is monotonic but non-linear (|r_s| - |r| = {delta:.3f} > {linear_tolerance}. This choice may be unreliable.")
+        return spearman_r
 
 # add dict input option + when no cols selected always just use first + second   
 def pearson_correlation(
@@ -259,29 +288,8 @@ def check_relationship(
                 # spearman
                 return spearman_correlation(df=data, cols=cols, b=b)
         else:
-            pearson_r = pearson_correlation(df=data, cols=cols, b=b)
-            spearman_r = spearman_correlation(df=data, cols=cols, b=b)
-
-            abs_p = abs(pearson_r)
-            abs_s = abs(spearman_r)
-            
-            # Heuristic step 1: check if a meaningful monotonic relationship exists
-            if abs_s < min_monotonicity:
-                corr_type = "spearman"
-                warnings.warn(f"`is_linear` was not specified; {corr_type} was selected automatically based on a heuristic. Relationship is weak/non-monotonic (Spearman |r_s| = {abs_s:.2f}). This choice may be unreliable.")
-                return spearman_r
-
-            # step 2: check linearity via magnitude divergence between spearman and pearson
-            delta = abs_s - abs_p
-
-            if delta <= linear_tolerance:
-                corr_type = "pearson"
-                warnings.warn(f"`is_linear` was not specified; {corr_type} was selected automatically based on a heuristic. This choice may be unreliable.")
-                return pearson_r
-            else:
-                corr_type = "spearman"
-                warnings.warn(f"`is_linear` was not specified; {corr_type} was selected automatically based on a heuristic. Relationship is monotonic but non-linear (|r_s| - |r| = {delta:.3f} > {linear_tolerance}. This choice may be unreliable.")
-                return spearman_r
+            # heuristic choice
+            return heuristic_corr_choice(df=data, cols=cols, b=b, linear_tolerance=linear_tolerance, min_monotonicity=min_monotonicity)
 
     elif param_types == {"categorical", "categorical"}:
         # chi2
