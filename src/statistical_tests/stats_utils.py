@@ -64,7 +64,17 @@ def _tailed_test(two_tailed: bool, left_tailed: bool, right_tailed: bool,t_stati
 
     return t_crit, p_value, stat_significance, is_significant, test_type, lower_bound, upper_bound, ci
 
-def f_test(k: float, N: float, within_group_variance: float, between_group_variance: float, critical_level: float = 0.05, two_tailed: bool = False, left_tailed: bool = False, right_tailed: bool = False):
+def f_test(
+    k: float, 
+    N: float, 
+    within_group_variance: float, 
+    between_group_variance: float, 
+    critical_level: float = 0.05, 
+    two_tailed: bool = False, 
+    left_tailed: bool = False, 
+    right_tailed: bool = False
+):
+    
     f_statistic = between_group_variance / within_group_variance
     dof_between = k - 1
     dof_within = N - k
@@ -88,3 +98,27 @@ def f_test(k: float, N: float, within_group_variance: float, between_group_varia
         raise ValueError("at least one test type has to be chosen. If you're using a dict, test type has to be passed as a seperate argument outside the dictionary")
 
     return f_statistic, f_crit, p_value, stat_significance, is_significant, test_type 
+
+def _tailed_proportion_test(z_statistic: float, alpha: float, two_tailed: bool = False, left_tailed: bool = False, right_tailed: bool = False) -> tuple:
+    if two_tailed: 
+        z_crit = float(scipy.stats.norm.ppf((1 - (alpha/2))))
+        p_value = float(2 * scipy.stats.norm.sf(abs(z_statistic)))
+        stat_significance, is_significant =  significance_check(p_value, alpha)
+        test_type = "two_tailed"
+       
+    elif left_tailed: 
+        z_crit = float(scipy.stats.norm.ppf((alpha)))
+        p_value = float(scipy.stats.norm.cdf(z_statistic))
+        stat_significance, is_significant = significance_check(p_value, alpha)
+        test_type = "left_tailed"
+  
+    elif right_tailed: 
+        z_crit = float(scipy.stats.norm.ppf((1 - alpha)))
+        p_value = float(scipy.stats.norm.sf(z_statistic))
+        stat_significance, is_significant = significance_check(p_value, alpha)
+        test_type = "right_tailed" 
+
+    else:
+        raise ValueError("at least one test type has to be chosen. If you're using a dict, test type has to be passed as a seperate argument outside the dictionary")
+
+    return z_crit, p_value, stat_significance, is_significant, test_type

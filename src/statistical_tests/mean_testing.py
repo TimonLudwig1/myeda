@@ -211,7 +211,6 @@ def one_sample_t_test(
 
     else:
         if paired:
-            # could write a small helper for numeric and len check
             if isinstance(mean, list):
                 for _ in mean:
                     if not isinstance(_, (int, float)):
