@@ -32,29 +32,25 @@ def _convert_to_bool_array(success: str, fail: str, data: list[str]) -> tuple[np
             contains entries other than the two categories (the offending
             entries are listed in the message).
     """
-    if set(data) <= {0, 1}:
-        n = len(data)
-        success_array = np.array(data)
-        return success_array, n
-    else:
-        [success, fail] = _check_if_string([success, fail])
-        data_str = _check_if_string(data)
 
-        success = success.strip().lower()
-        fail = fail.strip().lower()
+    [success, fail] = _check_if_string([success, fail])
+    data_str = _check_if_string(data)
 
-        if success == fail:
-            raise ValueError("success category cannot be same as fail category")
-        
-        data= [d.strip().lower() for d in data_str] 
-        n = len(data)
+    success = success.strip().lower()
+    fail = fail.strip().lower()
 
-        invalid = set(data) - {success, fail}
-        if invalid:
-            raise ValueError(f"Entries other than the defined categories found: {invalid}")
-        
-        success_array = np.array([success == d for d in data])
-        return success_array, n
+    if success == fail:
+        raise ValueError("success category cannot be same as fail category")
+    
+    data= [d.strip().lower() for d in data_str] 
+    n = len(data)
+
+    invalid = set(data) - {success, fail}
+    if invalid:
+        raise ValueError(f"Entries other than the defined categories found: {invalid}")
+    
+    success_array = np.array([success == d for d in data])
+    return success_array, n
 
 def _proportion_array_handler(
     data: list[str] | list[bool] | npt.NDArray[np.bool_] | pd.Series,
@@ -91,7 +87,7 @@ def _proportion_array_handler(
         if _get_dtype(data.dtype) == "boolean":
             n = len(data)
             success_array = data.to_numpy()
-
+        # add 1 and 0 int Series handling + nan check for series
         elif success is not None and fail is not None:
             if _get_dtype(data.dtype) != "categorical":
                 raise ValueError("Non-object type Series found")
@@ -324,6 +320,8 @@ def two_samp_z_test_proportions(
             raise ValueError("Exactly one of two_tailed, left_tailed, right_tailed must be True.")
     if data is not None:
         if isinstance(data, pd.DataFrame):
+            if data.isna().any().any():
+                raise ValueError("NaN-Values found in DataFrame.")
             if cols is None:
                 raise ValueError("When working with a DataFrame, pass a list of column names for cols=")
             else:
