@@ -25,8 +25,8 @@ def _handle_relationship_input(
 
         if cols is not None:
             if isinstance(cols, list):
-                _check_if_string(cols)
-                df = df_raw[cols]
+                cols_str = _check_if_string(cols)
+                df = df_raw[cols_str]
                 return df
             else:
                 raise ValueError("cols is not a list of strings. When working with a DataFrame, pass a list of strings")
@@ -103,19 +103,19 @@ def pearson_correlation(
         b: list[float] | NDArray[np.float64] | None = None, 
 ) -> float:
     if df is not None and cols is not None:
-        _check_if_string(cols)
-        if len(cols) != 2:
-            raise ValueError(f"exactly two columns required, got {len(cols)}")
+        cols_str = _check_if_string(cols)
+        if len(cols_str) != 2:
+            raise ValueError(f"exactly two columns required, got {len(cols_str)}")
         
-        x, y = cols
+        x, y = cols_str
 
         data = df[[x, y]].dropna()
 
         x_arr = data[x].to_numpy(dtype=float)
         y_arr = data[y].to_numpy(dtype=float)
 
-        dev_x = x_arr - _calculate_mean(df, x)  # type: ignore
-        dev_y = y_arr - _calculate_mean(df, y)  # type: ignore
+        dev_x = x_arr - _calculate_mean(df, x)  
+        dev_y = y_arr - _calculate_mean(df, y)  
     
     elif cols is not None and b is not None:
         x_arr, y_arr = _array_conversion(cols, b)
@@ -139,11 +139,11 @@ def spearman_correlation(
         b: list[float] | NDArray[np.float64] | None = None, 
 ) -> float:
     if df is not None and cols is not None:
-        _check_if_string(cols)
-        if len(cols) != 2:
-            raise ValueError(f"exactly two columns required, got {len(cols)}")
+        cols_str = _check_if_string(cols)
+        if len(cols_str) != 2:
+            raise ValueError(f"exactly two columns required, got {len(cols_str)}")
 
-        x, y = cols
+        x, y = cols_str
 
         rank_x = df[x].rank().to_numpy()
         rank_y = df[y].rank().to_numpy()
@@ -174,11 +174,11 @@ def chi_sq_independence(table: pd.DataFrame | dict[str, list], cols: list[str] |
     """
     # still more input data (type) checks missing 
     if cols is not None:
-        _check_if_string(cols)
+        cols_str = _check_if_string(cols)
 
         if isinstance(table, dict):
             df = pd.DataFrame(table)
-            table = pd.crosstab(df[cols[0]], df[cols[1]])    
+            table = pd.crosstab(df[cols_str[0]], df[cols_str[1]])    
 
         elif isinstance(table, pd.DataFrame):
             if is_crosstab:
@@ -186,7 +186,7 @@ def chi_sq_independence(table: pd.DataFrame | dict[str, list], cols: list[str] |
             else:
                 if table.shape[1] < 2:
                     raise ValueError("Invalid DataFrame shape. Need at least two columns to build a crosstab")
-                table = pd.crosstab(table[cols[0]], table[cols[1]])
+                table = pd.crosstab(table[cols_str[0]], table[cols_str[1]])
         else: 
             raise ValueError("Invalid input datatype")
     else:

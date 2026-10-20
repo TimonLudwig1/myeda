@@ -24,11 +24,16 @@ def _get_dtype(dtype) -> str:
         raise ValueError(f"Column contains datatype not suitable for plotting or calculating. Datatype: {dtype}")
 
 # change this so it returns the list as is if it is a list[str] 
-def _check_if_string(item: Any) -> None:
+def _check_if_string(item: Any) -> list[str]:
     if isinstance(item, list):
         if not item:
             raise ValueError(f"{item} is empty.")
         for value in item:
-            _check_if_string(value)
-    elif not isinstance(item, str):
-        raise ValueError(f"{item} is not a string. Pass a list of column names as strings")
+            if isinstance(value, str):
+                continue
+        return item
+    
+    elif isinstance(item, str):
+        return [item]
+    else:
+        raise ValueError(f"{item} is not a string. Pass a list of names as strings")

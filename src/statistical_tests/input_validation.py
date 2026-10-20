@@ -30,7 +30,7 @@ def _calculate_mean(df: pd.DataFrame, cols: str | list) -> float | dict:
         return mean
     
     if isinstance(cols, list):
-        _check_if_string(cols)
+        cols = _check_if_string(cols)
         means: dict[str, float] = {}
         for col in cols:
             if _get_dtype(df[col].dtype) != "numeric":

@@ -3,7 +3,7 @@ import pandas as pd
 from src.column_utils import _get_dtype, _check_if_string
 from typing import Any
 import pandas as pd
-from src.statistical_tests.input_validation import _calculate_mean, _check_if_string, _check_if_valid_for_test
+from src.statistical_tests.input_validation import _calculate_mean, _check_if_valid_for_test
 from src.statistical_tests.stats_utils import _tailed_test, f_test
 
 # config variables and constants
@@ -164,13 +164,13 @@ def one_sample_t_test(
     if df is not None: 
         if paired: 
             if isinstance(mean, list):
-                _check_if_string(mean)
-                if len(mean) > 2:
+                mean_str = _check_if_string(mean)
+                if len(mean_str) > 2:
                     raise ValueError(f"{mean} contains too many arguments. For a paired test pass only two columns")
-                mean1 = _calculate_mean(df=df, cols=mean[0])    # type: ignore
-                mean2 = _calculate_mean(df=df, cols=mean[1])    # type: ignore
-                df["differences"] = df[mean[0]] - df[mean[1]] 
-                mean = mean1 - mean2    # type: ignore
+                mean1 = _calculate_mean(df=df, cols=mean_str[0])    
+                mean2 = _calculate_mean(df=df, cols=mean_str[1])    
+                df["differences"] = df[mean_str[0]] - df[mean_str[1]] 
+                mean = mean1 - mean2    #type: ignore - fix this in _calculate_mean       
                 std = df["differences"].std()
             else: 
                 raise ValueError("when working with a DataFrame for a paired test, pass the columns for the paired values as a list of column names as str.")
@@ -212,14 +212,14 @@ def one_sample_t_test(
     else:
         if paired:
             if isinstance(mean, list):
-                for _ in mean:
-                    if not isinstance(_, (int, float)):
-                        raise ValueError(f"Invalid data type {type(_)} for {_}. Value for both means have to be numeric")
                 if len(mean) > 2:
                     raise ValueError(f"{std} contains too many arguments. For a paired test pass only two values")
-                mean1 = mean[0]    
-                mean2 = mean[1]  
-                mean = mean1 - mean2    # type: ignore
+                mean1, mean2 = mean  
+
+                if not isinstance(mean1, (int, float)) or not isinstance(mean2, (int, float)):
+                    raise ValueError("Values for both means have to be numeric")
+                
+                mean = mean1 - mean2    
 
         params = {
             "mean": mean,
@@ -291,8 +291,7 @@ def welch_t_test(
     std2: float | None = None,
     N2: float | None = None,
 ) -> dict:
-    # maybe change this to: def welch_t_test(*args, **kwargs) -> dict:
-    #   return _independant_t_test(*args, **kwargs, equal_var=False) instead of passing all args again
+    
     return _independant_t_test(
         mean1=mean1, 
         std1=std1, 
@@ -378,7 +377,6 @@ def  anova_test(
         # pass a list of col names you want to test as str
         if not isinstance(means, list):
             raise ValueError("{means} must be a list")
-        # calculate mean already uses _check_if_string, use list + loop, because I don't want a dict
         means_values = []
         N_per_group = []
         num_groups = len(means)
