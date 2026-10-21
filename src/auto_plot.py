@@ -125,8 +125,8 @@ def plot_histogram(df:pd.DataFrame, x_col:str):
 def _handle_single_num(df: pd.DataFrame, col: str, **_):
     return plot_histogram(df, col)
 
-def _handle_single_cat_or_bool(df: pd.DataFrame, col: str, **_):
-    counts = df.groupby(col).size()                 
+def _handle_single_cat_or_bool(df: pd.DataFrame, col: str, agg, **_):
+    counts = df.groupby(col).agg(agg)                 
     plot_df = counts.to_frame("count").reset_index()  
 
     return plot_bar(plot_df, col, "count")
@@ -166,6 +166,64 @@ def _handle_num_cat_cat(df: pd.DataFrame, x_col: str, y_col: str, other_col: str
             return plot_grouped_bar(df, x_col, y_col, agg, other_col)
     else:
         return plot_heatmap(df, x_col, y_col, other_col, agg)
+
+def _autoplot_one_var(df, x_col, agg):
+    key = (_get_dtype(df[x_col].dtype),)
+    handler = PLOT_MAP[key]
+    return handler(
+        df = df, 
+        col = x_col,
+        agg=agg
+    ) 
+
+def _autoplot_two_vars(df, x_col, y_col, distribution, agg):
+    types = [_get_dtype(df[x_col].dtype), _get_dtype(df[y_col].dtype)]
+    key = tuple(sorted(
+        types,
+        key=lambda dtype: TYPE_ORDER[dtype]
+    ))
+    handler = PLOT_MAP[key]
+    return handler(
+        df = df,
+        x_col = x_col,
+        y_col=y_col,
+        distribution=distribution,
+        agg = agg
+    )
+
+def _autoplot_multiple(df, x_col, y_col, other_cols, agg, additive):
+    if isinstance(other_cols, str):
+        types = [_get_dtype(df[other_cols].dtype), _get_dtype(df[y_col].dtype), _get_dtype(df[x_col].dtype)]
+        key = tuple(sorted( # sorted method loops through types
+            types,
+            key=lambda dtype: TYPE_ORDER[dtype] #lambda  <parameter> : <expression> (return)
+        ))
+        handler = PLOT_MAP[key]
+        return handler(
+            df = df,
+            x_col = x_col,
+            y_col = y_col, 
+            other_col = other_cols,
+            agg = agg,
+            additive = additive
+        )
+
+    elif isinstance(other_cols, list):
+        d_types_other_cols = []
+        for col in other_cols:
+            _check_if_string(col)
+            d_types_other_cols.append(df[col].dtype)
+        # check: length of list: I can't be bothered rn to do more than 2 additional variables (so 4 total) - so for now if len(other_cols) > 2 error:
+        if len(d_types_other_cols) > 2:
+            raise NotImplementedError("Currently, only up to 2 additional columns can be considered for plotting. Please provide 2 or fewer additional columns.")
+        # check to make sure all columns are either numeric, categorical, or datetime
+        for dtype_other in d_types_other_cols:
+            if not _is_valid_dtype(dtype_other):
+                raise ValueError(f"Column '{dtype_other}' must be either numeric categorical (object), or datetime.")      
+        # need to build handlers for this case    
+        raise NotImplementedError("Passing a list of column names is not implemented yet")
+    else:
+        raise ValueError("other_cols must be a string or a list of strings.")
 
 TYPE_ORDER = {
     "numeric": 0,
@@ -219,62 +277,14 @@ def auto_plot(df: pd.DataFrame, x_col: str, y_col: str | None = None, other_cols
             raise ValueError(f"Column '{y_col}' cannot be the same as column '{x_col}'.")
 
         if other_cols is not None:
-            if isinstance(other_cols, str):
-                types = [_get_dtype(df[other_cols].dtype), _get_dtype(df[y_col].dtype), _get_dtype(df[x_col].dtype)]
-                key = tuple(sorted( # sorted method loops through types
-                    types,
-                    key=lambda dtype: TYPE_ORDER[dtype] #lambda  <parameter> : <expression> (return)
-                ))
-                handler = PLOT_MAP[key]
-                handler(
-                    df = df,
-                    x_col = x_col,
-                    y_col = y_col, 
-                    other_col = other_cols,
-                    agg = agg,
-                    additive = additive
-                )
-
-            elif isinstance(other_cols, list):
-                d_types_other_cols = []
-                for col in other_cols:
-                    _check_if_string(col)
-                    d_types_other_cols.append(df[col].dtype)
-                # check: length of list: I can't be bothered rn to do more than 2 additional variables (so 4 total) - so for now if len(other_cols) > 2 error:
-                if len(d_types_other_cols) > 2:
-                    raise NotImplementedError("Currently, only up to 2 additional columns can be considered for plotting. Please provide 2 or fewer additional columns.")
-                # check to make sure all columns are either numeric, categorical, or datetime
-                for dtype_other in d_types_other_cols:
-                    if not _is_valid_dtype(dtype_other):
-                        raise ValueError(f"Column '{dtype_other}' must be either numeric categorical (object), or datetime.")      
-                # need to build handlers for this case    
-                raise NotImplementedError("Passing a list of column names is not implemented yet")
-            else:
-                raise ValueError("other_cols must be a string or a list of strings.")
+            return _autoplot_multiple(df, x_col, y_col, other_cols, agg, additive)
      
         # here: x and y but no other cols - so plots for 2 variables.
         else:
-            types = [_get_dtype(df[x_col].dtype), _get_dtype(df[y_col].dtype)]
-            key = tuple(sorted(
-                types,
-                key=lambda dtype: TYPE_ORDER[dtype]
-            ))
-            handler = PLOT_MAP[key]
-            handler(
-                df = df,
-                x_col = x_col,
-                y_col=y_col,
-                distribution=distribution,
-                agg = agg
-            )
+            return _autoplot_two_vars(df, x_col, y_col, distribution, agg)
     # plots for one variable
     else:
-        key = (_get_dtype(df[x_col].dtype),)
-        handler = PLOT_MAP[key]
-        handler(
-            df = df, 
-            col = x_col
-        ) 
+        return _autoplot_one_var(df, x_col, agg)
 
     if y_col is None and other_cols is not None:
          raise ValueError("To plot more than one variable, fill y_col first. other_cols is for additional variables to consider for plotting, not for plotting more than one variable.")
