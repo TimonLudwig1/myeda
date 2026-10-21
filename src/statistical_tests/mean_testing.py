@@ -1,7 +1,6 @@
 from math import sqrt
 import pandas as pd 
 from src.column_utils import _get_dtype, _check_if_string
-from typing import Any
 import pandas as pd
 from src.statistical_tests.input_validation import _calculate_mean, _check_if_valid_for_test
 from src.statistical_tests.stats_utils import _tailed_test, f_test
@@ -53,7 +52,7 @@ def _independant_t_test(
     mean2: float | None = None, 
     std2: float | None = None,
     N2: float | None = None,
-) -> dict:
+) -> dict[str, object]:
 
     # t-test helper 
 
@@ -127,19 +126,19 @@ def _independant_t_test(
         diff_in_means = ((mean1 - mean2) - hypothetical_difference) # type: ignore
         t_statistic = diff_in_means / standard_error  
         
-        t_crit, p_value, stat_significance, is_significant,test_type, lower_bound, upper_bound, ci = _tailed_test(two_tailed, left_tailed, right_tailed, t_statistic, dof, critical_level, diff_in_means, standard_error)
+        result = _tailed_test(two_tailed, left_tailed, right_tailed, t_statistic, dof, critical_level, diff_in_means, standard_error)
 
         results = {
-            "significance": stat_significance,
-            "test_type": test_type,
+            "significance": result.stat_significance,
+            "test_type": result.test_type,
             "dof": dof,
-            "p_value": p_value,
-            "is_significant": is_significant,
-            "confidence_interval": ci,
-            "lower_bound": lower_bound,
-            "upper_bound": upper_bound,
+            "p_value": result.p_value,
+            "is_significant": result.is_significant,
+            "confidence_interval": result.ci,
+            "lower_bound": result.lower_bound,
+            "upper_bound": result.upper_bound,
             "t_statistic": t_statistic,
-            "t_crit": t_crit,
+            "t_crit": result.t_crit,
         }
         results.update(params)
 
@@ -159,7 +158,7 @@ def one_sample_t_test(
     left_tailed: bool = False,
     right_tailed: bool = False,
     df: pd.DataFrame | None = None,
-    ):
+    ) -> dict[str, object]:
 
     if df is not None: 
         if paired: 
@@ -249,18 +248,18 @@ def one_sample_t_test(
         dof = n - 1 # type: ignore
         t_statistic = (mean - hypothesized_mean) / standard_error   # type: ignore
 
-        t_crit, p_value, stat_significance, is_significant,test_type, lower_bound, upper_bound, ci = _tailed_test(two_tailed, left_tailed, right_tailed, t_statistic, dof, critical_level, mean, standard_error)    # type: ignore
+        result = _tailed_test(two_tailed, left_tailed, right_tailed, t_statistic, dof, critical_level, mean, standard_error)    # type: ignore
 
         results = {
-            "significance": stat_significance,
-            "test_type": test_type,
+            "significance": result.stat_significance,
+            "test_type": result.test_type,
             "dof": dof,
-            "p_value": p_value,
-            "is_significant": is_significant,
-            "confidence_interval": ci,
-            "lower_bound": lower_bound,
-            "upper_bound": upper_bound,
-            "t_crit": t_crit,
+            "p_value": result.p_value,
+            "is_significant": result.is_significant,
+            "confidence_interval": result.ci,
+            "lower_bound": result.lower_bound,
+            "upper_bound": result.upper_bound,
+            "t_crit": result.t_crit,
         }
         if paired:
             params = {
@@ -290,7 +289,7 @@ def welch_t_test(
     mean2: float | None = None, 
     std2: float | None = None,
     N2: float | None = None,
-) -> dict:
+) -> dict[str, object]:
     
     return _independant_t_test(
         mean1=mean1, 
@@ -319,7 +318,8 @@ def students_t_test(
     mean2: float | None = None, 
     std2: float | None = None,
     N2: float | None = None,
-) -> dict:
+) -> dict[str, object]:
+    
     return _independant_t_test(
         mean1=mean1, 
         std1=std1, 
@@ -346,7 +346,8 @@ def paired_t_test(
     left_tailed: bool = False,
     right_tailed: bool = False,
     df: pd.DataFrame | None = None,
-) -> dict:
+) -> dict[str, object]:
+    
     return one_sample_t_test(
         mean=mean,
         hypothesized_mean=hypothesized_mean,
@@ -371,7 +372,7 @@ def  anova_test(
     left_tailed: bool = False,
     right_tailed: bool = False, 
     df: pd.DataFrame | None = None
-):
+) -> dict[str, object]:
 
     if df is not None:
         # pass a list of col names you want to test as str
@@ -459,15 +460,15 @@ def  anova_test(
         if num_groups != len(N_per_group) or num_groups != len(means):    # type: ignore   
             raise ValueError("number of groups does not match number of mean entries or number of sample size entries")
         N = sum(N_per_group)  # type: ignore  
-        f_statistic, f_crit, p_value, stat_significance, is_significant, test_type  = f_test(k=num_groups, N=N, within_group_variance=within_group_variance, between_group_variance=between_group_variance, critical_level= critical_level, two_tailed=two_tailed, right_tailed=right_tailed, left_tailed=left_tailed)  # type: ignore
+        result  = f_test(k=num_groups, N=N, within_group_variance=within_group_variance, between_group_variance=between_group_variance, critical_level= critical_level, two_tailed=two_tailed, right_tailed=right_tailed, left_tailed=left_tailed)  # type: ignore
 
-        results = {
-            "significance": stat_significance, 
-            "test_type": test_type,
-            "p_value": p_value,
-            "is_significant": is_significant,
-            "f_statistic": f_statistic,
-            "f_crit": f_crit,
+        results: dict[str, object] = {
+            "significance": result.stat_significance, 
+            "test_type": result.test_type,
+            "p_value": result.p_value,
+            "is_significant": result.is_significant,
+            "f_statistic": result.f_statistic,
+            "f_crit": result.f_crit,
         }
         results.update(params)
 

@@ -6,7 +6,7 @@ from numpy.typing import NDArray
 from src.column_utils import _check_if_string
 import pandas as pd 
 from src.statistical_tests.input_validation import _calculate_mean
-from src.statistical_tests.stats_utils import significance_check
+from src.statistical_tests.stats_utils import significance_check, _input_handling_chi2, _calculate_chi2
 from scipy.stats import rankdata, chi2
 
 
@@ -161,7 +161,13 @@ def spearman_correlation(
 
     return (dev_x * dev_y).sum() / np.sqrt((dev_x**2).sum() * (dev_y**2).sum())
 
-def chi_sq_independence(table: pd.DataFrame | dict[str, list], cols: list[str] | None = None, alpha: float = 0.05, Yates: bool = True, is_crosstab: bool = False) -> dict:
+def chi2_test_independence(
+        table: pd.DataFrame | dict[str, list], 
+        cols: list[str] | None = None, 
+        alpha: float = 0.05, 
+        Yates: bool = True, 
+        is_crosstab: bool = False
+) -> dict:
     """
     Performes a Chi-squared test of independence, based on the data you provide.
 
@@ -173,90 +179,26 @@ def chi_sq_independence(table: pd.DataFrame | dict[str, list], cols: list[str] |
     - is_crosstab: True | False if your DataFrame is already a crosstable. Default: False
     """
     # still more input data (type) checks missing 
-    if cols is not None:
-        cols_str = _check_if_string(cols)
+    table = _input_handling_chi2(table=table, cols=cols, is_crosstab=is_crosstab)
+    
+    result = _calculate_chi2(table=table, alpha=alpha, Yates=Yates) 
 
-        if isinstance(table, dict):
-            df = pd.DataFrame(table)
-            table = pd.crosstab(df[cols_str[0]], df[cols_str[1]])    
-
-        elif isinstance(table, pd.DataFrame):
-            if is_crosstab:
-                table = table
-            else:
-                if table.shape[1] < 2:
-                    raise ValueError("Invalid DataFrame shape. Need at least two columns to build a crosstab")
-                table = pd.crosstab(table[cols_str[0]], table[cols_str[1]])
-        else: 
-            raise ValueError("Invalid input datatype")
-    else:
-        if isinstance(table, dict):
-            df = pd.DataFrame(table)
-            table = pd.crosstab(df.iloc[:, 0], df.iloc[:, 1])
-        elif isinstance(table, pd.DataFrame):
-            if is_crosstab:
-                table = table
-            else:
-                if table.shape[1] < 2:
-                    raise ValueError("Invalid DataFrame shape. Need at least two columns to build a crosstab")
-                table = pd.crosstab(table.iloc[:, 0], table.iloc[:, 1])
-        else: 
-            raise ValueError("Invalid input datatype")
-
-    if (table < 0).any().any():
-        raise ValueError("Invalid sample data. Values cannot be negative")
-    totals_cols = table.sum(axis=0) # underneath
-    totals_rows = table.sum(axis=1) # right
-
-    if (totals_cols == 0).any() or (totals_rows == 0).any():
-        raise ValueError("Invalid smaple data. Row or column totals cannot be equal to zero")
-    for i in table.columns:
-        if _get_dtype(table[i].dtype) != "numeric":
-            raise ValueError(f"Non numeric entries found in column: {i}")
-    num_rows = len(table)
-    num_cols = len(table.columns)
-    distinct_categories = num_rows*num_cols
-
-    observed = table.to_numpy()
-
-    n = observed.sum() # .sum() on a xd array just sums up every entry
-
-    expected = np.outer(totals_cols, totals_rows) / n
-
-    if (expected == 0).any():   # any on a np.array without specifying axis (or axis=None) checks entire array
-        raise ValueError("Empty row or column: expected count of 0.")
-
-    if Yates:
-        X2 = ((expected - observed)**2 / expected).sum()        
-    else:
-        X2 = ((abs(expected - observed) - 0.5 )**2 / expected).sum()
-
-    if expected.min() < 1 or (expected < 5).mean() > 0.2:
-        warnings.warn("Expected counts are small; the chi-square approximation may be unreliable.")
-
-    dof = (num_rows - 1) * (num_cols - 1)
-    chi2_crit = chi2.ppf(1 - alpha, dof)  # inverse of cdf, gives quantile for pct value
-    p_value = float(chi2.sf(X2, dof))  # .sf : probability of right tail for given X2 and dof
-    V = np.sqrt(X2 / (n * min(num_rows - 1, num_cols - 1)))
-    stat_significance, is_significant = significance_check(p_value, alpha)
+    test_type = "Chi-Square Test of Independence"
 
     results = {
-        "n": n,
-        "Cramér's V": V,
-        "sample_data_points": distinct_categories,
-        "significance": stat_significance,
-        "test_type": "Chi-Square Test of Independence",
-        "dof": dof,
-        "p_value": p_value,
-        "is_significant": is_significant,
-        "X²": X2,
-        "chi2_crit": chi2_crit,
+        "n": result.n,
+        "Cramér's V": result.V,
+        "unique_category_combinations": result.distinct_combinations,
+        "significance": result.stat_significance,
+        "test_type": test_type,
+        "dof": result.dof,
+        "p_value": result.p_value,
+        "is_significant": result.is_significant,
+        "X²": result.X2,
+        "chi2_crit": result.chi2_crit,
         }
 
     return results
-
-
-    
 
 # main method
 def check_relationship(
@@ -293,6 +235,6 @@ def check_relationship(
 
     elif param_types == {"categorical", "categorical"}:
         # chi2
-        return chi_sq_independence(table=data, alpha=alpha, Yates=Yates, is_crosstab=is_crosstab)    
+        return chi2_test_independence(table=data, alpha=alpha, Yates=Yates, is_crosstab=is_crosstab)    
     else: 
         raise ValueError("Invalid combination of input data types for variables")

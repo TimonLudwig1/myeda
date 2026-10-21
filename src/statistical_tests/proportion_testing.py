@@ -2,7 +2,7 @@
 import warnings
 from src.column_utils import _get_dtype, _check_if_string
 from typing import Any
-from src.statistical_tests.stats_utils import _tailed_proportion_test, significance_check
+from src.statistical_tests.stats_utils import _tailed_proportion_test, significance_check, _input_handling_chi2, _calculate_chi2
 from math import sqrt
 import numpy as np
 import numpy.typing as npt
@@ -137,7 +137,7 @@ def one_samp_z_test_proportions(
     data: list[str] | list[bool] | npt.NDArray[np.bool_] | pd.Series | None = None,
     success: str | None = None,
     fail: str | None = None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """
     One-sample z-test for a proportion.
 
@@ -199,8 +199,7 @@ def one_samp_z_test_proportions(
     standard_error = sqrt(( (p0*(1-p0)) / n))
     z_score = (p_hat - p0) / standard_error
 
-    z_crit, p_value, stat_significance, is_significant, test_type = _tailed_proportion_test(z_statistic=z_score, alpha=alpha, two_tailed=two_tailed, 
-                                                                                                                                        right_tailed=right_tailed, left_tailed=left_tailed)
+    result = _tailed_proportion_test(z_statistic=z_score, alpha=alpha, two_tailed=two_tailed, right_tailed=right_tailed, left_tailed=left_tailed)
 
     results = {
         "sample_proportion": p_hat,
@@ -208,11 +207,11 @@ def one_samp_z_test_proportions(
         "sample_size": n,
         "z_score": z_score,
         "standard_error": standard_error,
-        "z_crit": z_crit,
-        "p_value": p_value,
-        "statistical_significance": stat_significance,
-        "is_significant": is_significant,
-        "test_type": test_type
+        "z_crit": result.z_crit,
+        "p_value": result.p_value,
+        "statistical_significance": result.stat_significance,
+        "is_significant": result.is_significant,
+        "test_type": result.test_type
     }
     return results
 
@@ -230,7 +229,7 @@ def two_samp_z_test_proportions(
     cols: list[str] | None = None,
     success: str | None = None,
     fail: str | None = None,
-):
+) -> dict[str, object]:
     """
     Two-sample z-test for the difference between two independent proportions.
 
@@ -382,7 +381,7 @@ def two_samp_z_test_proportions(
     standard_error = sqrt(p_c_hat * (1 - p_c_hat) * (1/n1 + 1/n2))
     z_statistic = float((p1_hat - p2_hat) / standard_error)
 
-    z_crit, p_value, stat_significance, is_significant, test_type = _tailed_proportion_test(z_statistic=z_statistic, alpha=alpha, two_tailed=two_tailed, 
+    result = _tailed_proportion_test(z_statistic=z_statistic, alpha=alpha, two_tailed=two_tailed, 
                                                                                                                                         left_tailed=left_tailed, right_tailed=right_tailed)
 
     results = {
@@ -393,21 +392,45 @@ def two_samp_z_test_proportions(
         "significance_level": alpha,
         "z_score": z_statistic,
         "standard_error": standard_error,
-        "z_crit": z_crit,
-        "p_value": p_value,
-        "statistical_significance": stat_significance,
-        "is_significant": is_significant,
-        "test_type": test_type
+        "z_crit": result.z_crit,
+        "p_value": result.p_value,
+        "statistical_significance": result.stat_significance,
+        "is_significant": result.is_significant,
+        "test_type": result.test_type
     }
 
     return results
 
-def chi_sq_test_homogeneity():
-    pass
+def chi2_test_homogeneity(
+        table: pd.DataFrame | dict[str, list],
+        cols: list[str] | None = None, 
+        alpha: float = 0.05,
+        Yates: bool = True,
+        is_crosstab: bool = False
+) -> dict[str, object]:
+    # do different populations or groups have the same categorical distribution?
+    table = _input_handling_chi2(table=table, cols=cols, is_crosstab=is_crosstab)
 
+    result = _calculate_chi2(table=table, alpha=alpha, Yates=Yates) 
 
+    test_type = "Chi-Square Test of Homogeneity"
 
-# main method
+    results = {
+        "n": result.n,
+        "Cramér's V": result.V,
+        "unique_category_combinations": result.distinct_combinations,
+        "significance": result.stat_significance,
+        "test_type": test_type,
+        "dof": result.dof,
+        "p_value": result.p_value,
+        "is_significant": result.is_significant,
+        "X²": result.X2,
+        "chi2_crit": result.chi2_crit,
+        }
+
+    return results
+
+# main method: 2 groups: z test, >2 groups chi2 
 
 def compare_proportions():
     pass
