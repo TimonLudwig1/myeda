@@ -9,8 +9,12 @@ import numpy.typing as npt
 import pandas as pd
 
 # helper
+def _normalize_labels(labels: str | list[str]) -> set[str]:
+    if isinstance(labels, str):
+        labels = [labels]
+    return {l.strip().lower() for l in labels}
 
-def _convert_to_bool_array(success: str, fail: str, data: list[str]) -> tuple[npt.NDArray[np.bool_], int]:
+def _convert_to_bool_array(success: str | list[str], fail: str, data: list[str]) -> tuple[npt.NDArray[np.bool_], int]:
     """
     Convert a list of category strings to a boolean success array.
 
@@ -33,28 +37,28 @@ def _convert_to_bool_array(success: str, fail: str, data: list[str]) -> tuple[np
             entries are listed in the message).
     """
 
-    [success, fail] = _check_if_string([success, fail])
+    _check_if_string([success, fail])
     data_str = _check_if_string(data)
 
-    success = success.strip().lower()
-    fail = fail.strip().lower()
+    success_set = _normalize_labels(success)
+    fail_set = _normalize_labels(fail)
 
-    if success == fail:
+    if fail_set.intersection(success_set):
         raise ValueError("success category cannot be same as fail category")
     
     data= [d.strip().lower() for d in data_str] 
     n = len(data)
 
-    invalid = set(data) - {success, fail}
+    invalid = set(data) - success_set.union(fail_set)
     if invalid:
         raise ValueError(f"Entries other than the defined categories found: {invalid}")
     
-    success_array = np.array([success == d for d in data])
+    success_array = np.array([d in success_set for d in data], dtype=bool)
     return success_array, n
 
 def _proportion_array_handler(
     data: list[str] | list[bool] | npt.NDArray[np.bool_] | pd.Series,
-    success: str | None = None,
+    success: str | list[str] | None = None,
     fail: str | None = None,
 ) -> tuple[float, int]:
     """
@@ -215,6 +219,7 @@ def one_samp_z_test_proportions(
     }
     return results
 
+# change structure: group as one col and values as second col. f.e. long format df
 def two_samp_z_test_proportions(
     p1_hat: float | list[str] | list[bool] | npt.NDArray[np.bool_] | pd.Series | None = None,
     p2_hat: float | list[str] | list[bool] | npt.NDArray[np.bool_] | pd.Series | None = None,
@@ -319,7 +324,7 @@ def two_samp_z_test_proportions(
             raise ValueError("Exactly one of two_tailed, left_tailed, right_tailed must be True.")
     if data is not None:
         if isinstance(data, pd.DataFrame):
-            if data.isna().any().any():
+            if data.isna().to_numpy().any():
                 raise ValueError("NaN-Values found in DataFrame.")
             if cols is None:
                 raise ValueError("When working with a DataFrame, pass a list of column names for cols=")
