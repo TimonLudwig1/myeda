@@ -291,17 +291,17 @@ def _calculate_chi2(
 
     observed = table.to_numpy()
 
-    n = observed.sum() # .sum() on a xd array just sums up every entry
+    n = int(observed.sum()) # .sum() on a xd array just sums up every entry
 
-    expected = np.outer(totals_cols, totals_rows) / n
+    expected = np.outer(totals_rows, totals_cols) / n
 
     if (expected == 0).any():   # any on a np.array without specifying axis (or axis=None) checks entire array
         raise ValueError("Empty row or column: expected count of 0.")
 
     if num_cols == 2 and num_rows == 2 and Yates:
-        X2 = ((abs(expected - observed) - 0.5 )**2 / expected).sum()       
+        X2 = float(((abs(expected - observed) - 0.5 )**2 / expected).sum())
     else:
-        X2 = ((expected - observed)**2 / expected).sum()
+        X2 = float(((expected - observed)**2 / expected).sum())
 
     if expected.min() < 1 or (expected < 5).mean() > 0.2:
         warnings.warn("Expected counts are small; the chi-square approximation may be unreliable.")
@@ -309,7 +309,7 @@ def _calculate_chi2(
     dof = (num_rows - 1) * (num_cols - 1)
     chi2_crit = float(scipy.stats.chi2.ppf(1 - alpha, dof))  # inverse of cdf, gives quantile for pct value
     p_value = float(scipy.stats.chi2.sf(X2, dof))  # .sf : probability of right tail for given X2 and dof
-    V = np.sqrt(X2 / (n * min(num_rows - 1, num_cols - 1)))
+    V = float(np.sqrt(X2 / (n * min(num_rows - 1, num_cols - 1))))
     stat_significance, is_significant = significance_check(p_value, alpha)
 
     return Chi2Result(

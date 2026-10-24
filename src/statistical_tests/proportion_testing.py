@@ -15,27 +15,6 @@ def _normalize_labels(labels: str | list[str]) -> set[str]:
     return {l.strip().lower() for l in labels}
 
 def _convert_to_bool_array(success: str | list[str], fail: str, data: list[str]) -> tuple[npt.NDArray[np.bool_], int]:
-    """
-    Convert a list of category strings to a boolean success array.
-
-    All inputs are stripped and lowercased before an exact comparison, so
-    "Yes " matches success="yes".
-
-    Args:
-        success: Category counted as a success.
-        fail: Category counted as a failure. Must differ from `success`
-            after normalization.
-        data: Observations as strings.
-
-    Returns:
-        Tuple (success_array, n): boolean numpy array (True = success)
-        and the number of observations.
-
-    Raises:
-        ValueError: If success and fail are identical, or if `data`
-            contains entries other than the two categories (the offending
-            entries are listed in the message).
-    """
 
     _check_if_string([success, fail])
     data_str = _check_if_string(data)
@@ -61,29 +40,6 @@ def _proportion_array_handler(
     success: str | list[str] | None = None,
     fail: str | None = None,
 ) -> tuple[float, int]:
-    """
-    Reduce raw data to the sample proportion and sample size.
-
-    Accepts a pandas Series, list or numpy array. Boolean and 0/1 data are
-    counted directly. Other data (strings/categories) are converted via
-    `_convert_to_bool_array` and therefore require `success` and `fail`;
-    for boolean or 0/1 data these two arguments are ignored.
-
-    Args:
-        data: Observations. Must not be empty or contain NaN.
-        success: Category counted as a success (non-boolean data only).
-        fail: Category counted as a failure (non-boolean data only).
-
-    Returns:
-        Tuple (p_hat, n) with the proportion of successes and the number
-        of observations.
-
-    Raises:
-        ValueError: If the data are empty, contain NaN or values outside
-            the defined categories, or if non-boolean data are passed
-            without `success`/`fail`.
-        TypeError: If `data` is not a Series, list or numpy array.
-    """
 
     if isinstance(data, pd.Series):
         if data.isna().any():
@@ -91,7 +47,9 @@ def _proportion_array_handler(
         if _get_dtype(data.dtype) == "boolean":
             n = len(data)
             success_array = data.to_numpy()
-        # add 1 and 0 int Series handling + nan check for series
+        elif set(data) <= {0, 1}:
+            n = len(data)
+            success_array = data.to_numpy().astype(bool)
         elif success is not None and fail is not None:
             if _get_dtype(data.dtype) != "categorical":
                 raise ValueError("Non-object type Series found")
@@ -126,9 +84,8 @@ def _proportion_array_handler(
         raise TypeError(f"Unsupported data type {type(data)} passed")
     p_hat = success_array.sum() / n
 
-    return p_hat, n
-    
-# add option for data to be dict
+    return float(p_hat), int(n)
+
 def one_samp_z_test_proportions(
     p0: float,      # hypothesized under H0
     p_hat: float | None = None,   # observed from sample
@@ -142,48 +99,6 @@ def one_samp_z_test_proportions(
     success: str | None = None,
     fail: str | None = None,
 ) -> dict[str, object]:
-    """
-    One-sample z-test for a proportion.
-
-    Tests whether an observed sample proportion differs from the
-    hypothesized population proportion p0. The input can be either raw data
-    (`data`, plus `success`/`fail` if the data are not already boolean) or
-    the summary values `p_hat` and `n`. If `data` is given, `p_hat` and `n`
-    are ignored.
-
-    The success-failure condition (n*p0 >= min_count and
-    n*(1-p0) >= min_count) is checked with p0, since the test assumes H0
-    is true.
-
-    Args:
-        p0: Hypothesized population proportion under H0.
-        p_hat: Observed sample proportion. Required together with `n`
-            if `data` is not given.
-        n: Sample size. Required together with `p_hat` if `data` is not given.
-        alpha: Significance level. Default 0.05.
-        two_tailed: Test H1: p != p0.
-        right_tailed: Test H1: p > p0.
-        left_tailed: Test H1: p < p0.
-        min_count: Minimum for n*p0 and n*(1-p0) in the success-failure
-            condition. Default 10.
-        data: Raw observations as a pandas Series, list or numpy array.
-            Boolean or 0/1 values are used as is. Other values require
-            `success` and `fail`.
-        success: Category counted as a success (case- and
-            whitespace-insensitive). Only used for non-boolean data.
-        fail: Category counted as a failure. Only used for non-boolean data.
-
-    Returns:
-        Dict with the keys sample_proportion, hypothesized_population_proportion,
-        sample_size, z_score,, standard_error, z_crit, p_value, statistical_significance,
-        is_significant and test_type. For two-tailed tests, z_crit is the
-        positive critical value (the rejection region is beyond +/- z_crit).
-
-    Raises:
-        ValueError: If not exactly one of the three tail flags is True,
-            if neither `data` nor both `p_hat` and `n` are given, if the
-            success-failure condition is not met, or if the data are invalid.
-    """
     
     if sum([two_tailed, right_tailed, left_tailed]) != 1:
         raise ValueError("Exactly one of two_tailed, left_tailed, right_tailed must be True.")
@@ -219,7 +134,7 @@ def one_samp_z_test_proportions(
     }
     return results
 
-# change structure: group as one col and values as second col. f.e. long format df
+# rn groups have to be in long format: cols needs to be [group, value]
 def two_samp_z_test_proportions(
     p1_hat: float | list[str] | list[bool] | npt.NDArray[np.bool_] | pd.Series | None = None,
     p2_hat: float | list[str] | list[bool] | npt.NDArray[np.bool_] | pd.Series | None = None,
@@ -235,90 +150,6 @@ def two_samp_z_test_proportions(
     success: str | None = None,
     fail: str | None = None,
 ) -> dict[str, object]:
-    """
-    Two-sample z-test for the difference between two independent proportions.
-
-    Tests H0: p1 = p2 and uses the pooled proportion for the standard error.
-    The input can be given as sample proportions plus sample sizes, as raw
-    observations of each group, or as two columns of a DataFrame.
-
-    Parameters
-    ----------
-    p1_hat, p2_hat : float or list or numpy.ndarray or pandas.Series, optional
-        Group 1 and group 2. Both must be of the same kind:
-
-        - Floats: the sample proportions (between 0 and 1). ``n1`` and ``n2``
-          are required in this case.
-        - Raw observations: booleans, or labels such as strings that are
-          matched via ``success`` / ``fail``. The proportions and sample sizes
-          are calculated from the data, so ``n1`` and ``n2`` are ignored
-          (a warning is raised if they are passed anyway).
-
-        Ignored if ``data`` is passed.
-    n1 : int or list of int, optional
-        Sample size of group 1. Can also be a list ``[n1, n2]``; ``n2`` is then
-        ignored (with a warning). Only used if proportions are passed as floats.
-    n2 : int, optional
-        Sample size of group 2. Only used if proportions are passed as floats.
-    alpha : float, default 0.05
-        Significance level.
-    two_tailed : bool, default False
-        Test H1: p1 != p2.
-    right_tailed : bool, default False
-        Test H1: p1 > p2.
-    left_tailed : bool, default False
-        Test H1: p1 < p2.
-
-        Exactly one of ``two_tailed``, ``right_tailed`` and ``left_tailed``
-        must be True.
-    min_count : int, default 10
-        Minimum number of expected successes and failures per group
-        (success-failure condition). Both ``n * p_hat`` and ``n * (1 - p_hat)``
-        must be at least ``min_count`` for each group.
-    data : pandas.DataFrame, optional
-        DataFrame holding the raw observations. Each of the two columns in
-        ``cols`` is treated as one independent group.
-    cols : list of str, optional
-        Names of exactly two columns of ``data`` (group 1, group 2).
-        Required if ``data`` is passed.
-    success, fail : str, optional
-        Labels that mark a success or a failure in the raw observations,
-        e.g. ``success="passed"``, ``fail="failed"``.
-
-    Returns
-    -------
-    dict
-        Dictionary with the keys ``proportion_group_1``, ``proportion_group_2``,
-        ``sample_size_1``, ``sample_size_2``, ``significance_level``,
-        ``z_score``, ``standard_error``, ``z_crit``, ``p_value``,
-        ``statistical_significance`` (readable summary), ``is_significant``
-        (bool) and ``test_type``.
-
-    Raises
-    ------
-    ValueError
-        If not exactly one test direction is selected, if the input types or
-        combination are invalid, if ``cols`` does not contain exactly two
-        column names, if a sample size is missing, or if the success-failure
-        condition is not met for one of the groups.
-
-    Warns
-    -----
-    UserWarning
-        If ``n1`` / ``n2`` are passed although they are ignored or calculated
-        from the data.
-
-    Notes
-    -----
-    The two groups must be independent. For paired data (the same subjects
-    measured twice), use McNemar's test instead.
-
-    The test statistic is::
-
-        z = (p1_hat - p2_hat) / sqrt(p_pooled * (1 - p_pooled) * (1/n1 + 1/n2))
-
-    with ``p_pooled = (n1 * p1_hat + n2 * p2_hat) / (n1 + n2)``.
-    """
     
     if sum([two_tailed, right_tailed, left_tailed]) != 1:
             raise ValueError("Exactly one of two_tailed, left_tailed, right_tailed must be True.")
@@ -332,33 +163,34 @@ def two_samp_z_test_proportions(
                 if len(cols) < 2 or len(cols) > 2:
                     raise ValueError("Invalid number of column names. Specify exactly two column names")
                 cols = _check_if_string(cols)
-                p1_hat, n1 = _proportion_array_handler(data=data[cols[0]], success=success, fail=fail)
-                p2_hat, n2 = _proportion_array_handler(data=data[cols[1]], success=success, fail=fail)
+                # filter rows for the two groups with loc 
+                groups = data[cols[0]].unique()
+                group_one = data.loc[data[cols[0]] == groups[0], cols[1]]
+                group_two = data.loc[data[cols[0]] == groups[1], cols[1]]
+                p1_hat, n1 = _proportion_array_handler(data=group_one, success=success, fail=fail)
+                p2_hat, n2 = _proportion_array_handler(data=group_two, success=success, fail=fail)
         else:
             raise ValueError(f"Invalid data type for 'data'. Found {type(data)}. Needed pd.DataFrame")
     else:
         if isinstance(p1_hat, float) and isinstance(p2_hat, float):
-            if n1 is not None:
-                if isinstance(n1, list):
-                    if n2 is not None:
-                        warnings.warn("n2 was passed while n1 was passed as a list. The value for n2 will be ignored")
-                    if len(n1) > 2 or len(n1) < 2:
-                        raise ValueError(f"Invalid number of entries found in list of sample_sizes. Number of entries: {len(n1)}")
-                    for i in n1:
-                        if not isinstance(i, int):
-                            raise ValueError(f"Non-numeric entry found in {n1}")
-                    n2 = n1[1]
-                    n1 = n1[0]
+            if isinstance(n1, list):
+                if n2 is not None:
+                    warnings.warn("n2 was passed while n1 was passed as a list. The value for n2 will be ignored")
+                if len(n1) > 2 or len(n1) < 2:
+                    raise ValueError(f"Invalid number of entries found in list of sample_sizes. Number of entries: {len(n1)}")
+                for i in n1:
+                    if not isinstance(i, int):
+                        raise ValueError(f"Non-numeric entry found in {n1}")
+                n2 = n1[1]
+                n1 = n1[0]
 
-                elif isinstance(n1, int):
-                    if n2 is None:
-                        raise ValueError("n2 is missing. n1 was passed as an int, so n2 must be passed as an int as well")
-                    elif not isinstance(n2, int):
-                        raise ValueError(f"Invalid data type for n2. Got {type(n2)}, expected: int")
-                else:
-                    raise ValueError(f"Invalid data type for n1. Found {type(n1)}, expected: int | list")
+            elif isinstance(n1, int):
+                if n2 is None:
+                    raise ValueError("n2 is missing. n1 was passed as an int, so n2 must be passed as an int as well")
+                elif not isinstance(n2, int):
+                    raise ValueError(f"Invalid data type for n2. Got {type(n2)}, expected: int")
             else:
-                raise ValueError("n1 is None. If p1_hat and p2_hat are passed as a float, n1 cannot be None")
+                raise ValueError(f"Invalid data type for n1. Found {type(n1)}, expected: int | list")
 
         elif isinstance((p1_hat), (list, np.ndarray, pd.Series)) and isinstance(p2_hat, (list, np.ndarray, pd.Series)):
             if n1 is not None or n2 is not None:
@@ -401,22 +233,23 @@ def two_samp_z_test_proportions(
         "p_value": result.p_value,
         "statistical_significance": result.stat_significance,
         "is_significant": result.is_significant,
+        "test": "two_sample_z_test_for_proportions",
         "test_type": result.test_type
     }
 
     return results
 
 def chi2_test_homogeneity(
-        table: pd.DataFrame | dict[str, list],
+        data: pd.DataFrame | dict[str, list],
         cols: list[str] | None = None, 
         alpha: float = 0.05,
         Yates: bool = True,
         is_crosstab: bool = False
 ) -> dict[str, object]:
-    # do different populations or groups have the same categorical distribution?
-    table = _input_handling_chi2(table=table, cols=cols, is_crosstab=is_crosstab)
 
-    result = _calculate_chi2(table=table, alpha=alpha, Yates=Yates) 
+    data = _input_handling_chi2(table=data, cols=cols, is_crosstab=is_crosstab)
+
+    result = _calculate_chi2(table=data, alpha=alpha, Yates=Yates) 
 
     test_type = "Chi-Square Test of Homogeneity"
 
@@ -425,7 +258,7 @@ def chi2_test_homogeneity(
         "Cramér's V": result.V,
         "unique_category_combinations": result.distinct_combinations,
         "significance": result.stat_significance,
-        "test_type": test_type,
+        "test": test_type,
         "dof": result.dof,
         "p_value": result.p_value,
         "is_significant": result.is_significant,
@@ -437,5 +270,60 @@ def chi2_test_homogeneity(
 
 # main method: 2 groups: z test, >2 groups chi2 
 
-def compare_proportions():
-    pass
+def compare_proportions(
+    data: pd.DataFrame | None,
+    cols: list[str] | None,
+    p1_hat: list[str] | list[bool] | npt.NDArray[np.bool_] | pd.Series | None = None,
+    p2_hat: float | list[str] | list[bool] | npt.NDArray[np.bool_] | pd.Series | None = None,
+    n1: int | list[int] | None = None,
+    n2: int | None = None,
+    alpha: float = 0.05,
+    two_tailed: bool = False,
+    right_tailed: bool = False,
+    left_tailed: bool = False,
+    min_count: int = 10, 
+    success: str | None = None,
+    fail: str | None = None,
+    Yates: bool = True,
+    is_crosstab: bool = False
+) -> dict[str, object]:
+
+    if is_crosstab:     # hast to be chi2 then
+        if isinstance(data, pd.DataFrame):
+            return chi2_test_homogeneity(
+                data=data, cols=cols, alpha=alpha,Yates=Yates,is_crosstab=is_crosstab
+                )
+        else: 
+            raise ValueError("is_instance set to true, even tho ""data"f" is not a pd.DataFrame. Got {type(data)}, expected: pd.Dataframe")
+        
+    elif data is not None and cols is not None:
+        if isinstance(data, dict):
+            data = pd.DataFrame(data)
+        elif not isinstance(data, pd.DataFrame):
+            raise ValueError(f"Invalid data taype for `data`. Got {type(data)}, expected: pd.DataFrame")
+        # data is a df, for chi 2 one col is group and one col is category, for z test one col per sample group
+        if len(data[cols[0]].unique()) == 2:
+            return two_samp_z_test_proportions(
+                p1_hat=p1_hat, p2_hat=p2_hat, n1=n1, n2=n2, alpha=alpha, 
+                two_tailed=two_tailed, right_tailed=right_tailed, left_tailed=left_tailed,
+                min_count=min_count, data=data, cols=cols, success=success, fail=fail
+            )
+        elif len(data[cols[0]].unique()) <= 2:
+            raise ValueError(f"Invalid number of cols passed. Expected 2: [group, values], got: {len(data[cols[0]].unique())}")
+        else:
+            return chi2_test_homogeneity(
+                            data=data, cols=cols, alpha=alpha,Yates=Yates,is_crosstab=is_crosstab
+                            )
+
+    elif data is None and p1_hat is not None:
+        return two_samp_z_test_proportions(
+                        p1_hat=p1_hat, p2_hat=p2_hat, n1=n1, n2=n2, alpha=alpha, 
+                        two_tailed=two_tailed, right_tailed=right_tailed, left_tailed=left_tailed,
+                        min_count=min_count, data=data, cols=cols, success=success, fail=fail
+                    )
+    elif data is None and p1_hat is None:
+        raise ValueError("Invalid combination of arguments. data and p1_hat missing")
+
+    else:
+        # unreachable
+        raise ValueError("Something went wrong")
