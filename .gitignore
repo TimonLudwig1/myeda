@@ -6,5 +6,5 @@ __pycache__/
 .venv/
 venv/
 .DS_Store
-notes.md
+notes*
 archive.md
