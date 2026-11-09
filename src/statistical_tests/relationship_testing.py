@@ -145,8 +145,10 @@ def spearman_correlation(
 
         x, y = cols_str
 
-        rank_x = df[x].rank().to_numpy()
-        rank_y = df[y].rank().to_numpy()
+        data = df[[x, y]].dropna()
+
+        rank_x = data[x].rank().to_numpy()
+        rank_y = data[y].rank().to_numpy()
 
     elif cols is not None and b is not None:
         x_arr, y_arr = _array_conversion(cols, b)

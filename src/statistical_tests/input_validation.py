@@ -26,6 +26,7 @@ def _calculate_mean(df: pd.DataFrame, cols: str | list) -> float | dict:
     if isinstance(cols, str):
         if _get_dtype(df[cols].dtype) != "numeric": 
             raise ValueError(f"{cols} has invalid data type: {df[cols].dtype}. To compare means, all columns must contain numeric values")
+        # calculates on NaN rows as well
         mean = df[cols].mean()
         return mean
     

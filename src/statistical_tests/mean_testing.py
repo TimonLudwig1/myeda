@@ -123,7 +123,8 @@ def _independant_t_test(
             standard_error = sqrt((std1**2 / N1) + (std2**2 / N2)) # type: ignore
             dof = (((std1**2/N1) + (std2**2/N2))**2) / (((std1**2 / N1)**2 / (N1 - 1)) + ((std2**2 / N2)**2 / (N2 - 1)))  # type: ignore
 
-        diff_in_means = ((mean1 - mean2) - hypothetical_difference) # type: ignore
+        diff_in_means = (mean1 - mean2) # type: ignore
+        diff_means_hypo = ((mean1 - mean2) - hypothetical_difference) # type: ignore
         t_statistic = diff_in_means / standard_error  
         
         result = _tailed_test(two_tailed, left_tailed, right_tailed, t_statistic, dof, critical_level, diff_in_means, standard_error)
